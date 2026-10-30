@@ -27,3 +27,4 @@ def get_vad(config: VADConfig) -> vad.VAD:
         )
 
     raise ValueError(f"Unsupported VAD provider: {config.provider}")
+

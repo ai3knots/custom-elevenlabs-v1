@@ -44,3 +44,4 @@ def get_tts(config: TTSConfig, api_key: str | None = None) -> tts.TTS:
         return elevenlabs.TTS(**eleven_kwargs)
 
     raise ValueError(f"Unsupported TTS provider: {config.provider}")
+

@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: posivex_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-posivex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-posivex}
+      POSTGRES_DB: ${POSTGRES_DB:-posivex_calls}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-posivex} -d ${POSTGRES_DB:-posivex_calls}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - core
+      - all
+
+  redis:
+    image: redis:7-alpine
+    container_name: posivex_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - core
+      - all
+
+  livekit-server:
+    image: livekit/livekit-server:latest
+    container_name: posivex_livekit
+    restart: unless-stopped
+    command: --dev
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    profiles:
+      - core
+      - all
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -106,3 +106,4 @@ def test_call_request_elevenlabs_aliases():
     assert req.dynamic_variables.business_name == "Tony's Pizza & Grill"
     assert req.dynamic_variables.is_followup == "true"
     assert req.dynamic_variables.contact_name == "Tony"
+

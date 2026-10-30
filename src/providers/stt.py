@@ -53,3 +53,4 @@ def get_stt(config: STTConfig, api_key: str | None = None) -> stt.STT:
         raise NotImplementedError("AssemblyAI STT provider is deferred to future phase.")
 
     raise ValueError(f"Unsupported STT provider: {config.provider}")
+

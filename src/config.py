@@ -299,3 +299,4 @@ def load_settings(
         merged = deep_merge(merged, overrides)
 
     return Settings.model_validate(merged)
+
