@@ -128,3 +128,4 @@ def configure_logging(level: int = logging.INFO) -> None:
 def get_logger(name: str) -> logging.Logger:
     """Obtain a logger instance with the given name."""
     return logging.getLogger(name)
+

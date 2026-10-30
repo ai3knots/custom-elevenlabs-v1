@@ -29,3 +29,4 @@ uv run pyright
 # Run tests
 uv run pytest
 ```
+

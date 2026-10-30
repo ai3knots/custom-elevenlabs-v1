@@ -1,0 +1,93 @@
+environment: "development"
+log_level: "INFO"
+persona: "amelia"
+display_name: "Amelia"
+gender: "female"
+language: "en"
+
+# Provider Settings
+stt:
+  provider: "deepgram"
+  model: "nova-3"
+  language_mode: "en" # "en" | "es" | "multi"
+  language: "en-US"
+  language_hint:
+    - "en"
+    - "es"
+  endpointing_ms: 25
+  interim_results: true
+  punctuate: true
+  smart_format: false
+
+llm:
+  provider: "google"
+  default_model: "gemini-3.5-flash-lite"
+  conversation_model: "gemini-3.5-flash"
+  fallback_model: "gemini-2.5-flash"
+  temperature: 0.0
+  thinking_level: "minimal"
+  cascade_timeout: 4.0
+  max_retries: 0
+
+tts:
+  provider: "elevenlabs"
+  model: "eleven_v3_conversational"
+  voice_id: "eXpIbVcVbLo8ZJQDlDnl" # Amelia voice
+  encoding: "pcm_24000"
+  stability: 0.5
+  similarity_boost: 0.8
+  expressive: true
+
+vad:
+  provider: "silero"
+  min_speech_duration: 0.05
+  min_silence_duration: 0.55
+  prefix_padding_duration: 0.5
+
+turn_detector:
+  mode: "stt-only"
+
+conversation:
+  max_duration_seconds: 900
+  silence_timeout_seconds: 15.0
+  max_silence_count: 3
+  hold_duration_seconds: 12.0
+  interruption_ignore_terms:
+    - "mmhmm"
+    - "uhhuh"
+    - "uh huh"
+    - "uh"
+    - "mm"
+    - "hmm"
+    - "okay"
+    - "ok"
+    - "okey"
+    - "i see"
+    - "go on"
+    - "go ahead"
+    - "right"
+    - "gotcha"
+    - "mmm"
+    - "mhm"
+    - "ajá"
+    - "vale"
+    - "ya"
+    - "sí"
+    - "claro"
+    - "entiendo"
+    - "dígame"
+
+kb:
+  mode: "inline"
+  file_path: "reference/elevenlabs-agent-config/agent-v5-Amelia/Knowledge-base.md"
+  max_token_budget: 4000
+
+webhook:
+  lead_gen_base_url: "http://localhost:3000"
+  webhook_secret: "dev_webhook_secret"
+  max_retries: 10
+  retry_backoff_base: 2.0
+
+telephony:
+  provider: "mock"
+  sip_trunk_id: null

@@ -37,7 +37,7 @@
 | Step | Milestone | Scope / Deliverables | Status |
 |---|---|---|---|
 | **B0** | **Project Scaffold & Tooling** | `uv init`, `pyproject.toml`, pinned dependencies (`livekit-agents==1.8.10`), ruff, pyright, pytest, structured JSON logging with `call_id` context propagation and sensitive data redaction, `Taskfile.yaml`. | **Completed** |
-| **B1** | **Config Engine & Provider Registry** | Layered configuration (`defaults.yaml` -> `profiles/<persona>.yaml` -> `.env` -> dispatch metadata); pluggable provider factories (STT, LLM, TTS, VAD, FallbackAdapter); single-line switchability unit tests. | Queued |
+| **B1** | **Config Engine & Provider Registry** | Layered configuration (`defaults.yaml` -> `profiles/<persona>.yaml` -> `.env` -> dispatch metadata); pluggable provider factories (STT, LLM, TTS, VAD, FallbackAdapter); single-line switchability unit tests. | **Completed** |
 | **B2** | **Infrastructure & Database** | `docker-compose.yml` (`core` profile: Postgres, Redis, LiveKit dev mux); multi-stage uv `Dockerfile`; async SQLAlchemy 2 models (`calls`, `call_events`, `transcripts`, `usage_costs`, `webhook_outbox`); Alembic migration. | Queued |
 | **B3** | **Finite State Machine Engine** | Pure-Python FSM (`src/fsm/`) with 7 states (`opener`, `reach_owner`, `conversation`, `lock_in`, `close`, `dnc_close`, `end`); allowed transition matrix; prompt-driven DNC transition; hold timers; unit tests. | Queued |
 | **B4** | **Prompts & Knowledge Base** | Jinja2 templates for Amelia and Michael (Nodes 1–5, bilingual guardrails, pricing tables); inline KB injector with startup token budget validator. | Queued |
