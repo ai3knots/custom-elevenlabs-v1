@@ -1,0 +1,1311 @@
+{
+  "agent_id": "agent_8401m61r9k8kffpvcjqxtkx3ams1",
+  "name": "Elevenlabs Test Agent",
+  "conversation_config": {
+    "asr": {
+      "quality": "high",
+      "provider": "scribe_realtime",
+      "user_input_audio_format": "pcm_16000",
+      "keywords": [],
+      "keyterm_libraries": []
+    },
+    "turn": {
+      "turn_timeout": 7,
+      "initial_wait_time": null,
+      "silence_end_call_timeout": -1,
+      "mode": "turn",
+      "turn_eagerness": "normal",
+      "spelling_patience": "auto",
+      "speculative_turn": true,
+      "retranscribe_on_turn_timeout": false,
+      "turn_model": "turn_v3",
+      "interruption_ignore_terms": [],
+      "interruption_ignore_term_languages": [],
+      "merge_with_default_ignore_terms": false,
+      "transcribe_on_disabled_interruptions": false,
+      "soft_timeout_config": {
+        "timeout_seconds": -1,
+        "message": "Hhmmmm...yeah.",
+        "additional_soft_timeout_messages": [],
+        "use_llm_generated_message": false,
+        "randomize_fillers": false,
+        "max_soft_timeouts_per_generation": 1,
+        "llm_generated_message_prompt_override": null,
+        "disable_until_first_user_message": false
+      },
+      "noisy_environment_detection": false,
+      "noisy_environment_message": "Uhh ... sorry, I'm picking up some noise in the background. Could you move somewhere quieter?"
+    },
+    "tts": {
+      "model_id": "eleven_v3_conversational",
+      "voice_id": "eXpIbVcVbLo8ZJQDlDnl",
+      "supported_voices": [],
+      "expressive_mode": true,
+      "suggested_audio_tags": [
+        {
+          "tag": "Empathetically",
+          "description": ""
+        },
+        {
+          "tag": "Confidently",
+          "description": ""
+        },
+        {
+          "tag": "Warmly",
+          "description": ""
+        },
+        {
+          "tag": "Excitedly",
+          "description": ""
+        },
+        {
+          "tag": "Patiently",
+          "description": ""
+        },
+        {
+          "tag": "Enthusiastically",
+          "description": ""
+        },
+        {
+          "tag": "Seriously",
+          "description": ""
+        },
+        {
+          "tag": "Chuckles",
+          "description": ""
+        },
+        {
+          "tag": "Laughing",
+          "description": ""
+        },
+        {
+          "tag": "Sighs",
+          "description": ""
+        }
+      ],
+      "agent_output_audio_format": "pcm_16000",
+      "optimize_streaming_latency": 3,
+      "stability": 0.5,
+      "speed": 1,
+      "similarity_boost": 0.75,
+      "clone_strength": 0,
+      "text_normalisation_type": "system_prompt",
+      "pronunciation_dictionary_locators": [],
+      "enable_phoneme_tags": true,
+      "audio_effects": null
+    },
+    "conversation": {
+      "text_only": false,
+      "max_duration_seconds": 600,
+      "max_duration_seconds_after_last_agent_message": null,
+      "client_events": [
+        "audio",
+        "interruption",
+        "user_transcript",
+        "agent_response",
+        "agent_response_correction"
+      ],
+      "file_input": {
+        "enabled": true,
+        "max_files_in_memory": 10,
+        "max_files_per_conversation": 10
+      },
+      "monitoring_enabled": false,
+      "monitoring_events": [
+        "user_transcript",
+        "agent_response",
+        "agent_response_correction"
+      ],
+      "dtmf_input_settings": null,
+      "background_sound": {
+        "source_type": null,
+        "source_id": null,
+        "volume": 0.15,
+        "crossfade_loop": true
+      },
+      "compaction": {
+        "enabled": null,
+        "soft_trigger_fraction": null,
+        "tail_size": null,
+        "min_reclaimable_tokens": null
+      },
+      "source_attribution": true
+    },
+    "language_presets": {
+      "es": {
+        "overrides": {
+          "asr": null,
+          "turn": null,
+          "tts": null,
+          "conversation": null,
+          "agent": {
+            "first_message": "Hola, soy Amelia de Clover Posivex. ¿Hablo con el propietario de {{business_name}}?",
+            "language": null,
+            "max_conversation_duration_message": null,
+            "silence_end_call_message": null,
+            "prompt": null
+          }
+        },
+        "first_message_translation": {
+          "source_hash": "{\"firstMessage\":\"Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of {{business_name}}?\",\"language\":\"en\"}",
+          "text": "Hola, soy Amelia de Clover Posivex. ¿Hablo con el propietario de {{business_name}}?"
+        },
+        "soft_timeout_translation": null,
+        "noisy_environment_message_translation": null
+      },
+      "hi": {
+        "overrides": {
+          "asr": null,
+          "turn": null,
+          "tts": null,
+          "conversation": null,
+          "agent": {
+            "first_message": "नमस्ते, मैं Clover Posivex से अमेलिया बोल रही हूँ। क्या मैं {{business_name}} के मालिक से बात कर रही हूँ?",
+            "language": null,
+            "max_conversation_duration_message": null,
+            "silence_end_call_message": null,
+            "prompt": null
+          }
+        },
+        "first_message_translation": {
+          "source_hash": "{\"firstMessage\":\"Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of {{business_name}}?\",\"language\":\"en\"}",
+          "text": "नमस्ते, मैं Clover Posivex से अमेलिया बोल रही हूँ। क्या मैं {{business_name}} के मालिक से बात कर रही हूँ?"
+        },
+        "soft_timeout_translation": null,
+        "noisy_environment_message_translation": null
+      },
+      "ur": {
+        "overrides": {
+          "asr": null,
+          "turn": null,
+          "tts": null,
+          "conversation": null,
+          "agent": {
+            "first_message": "ہیلو، میں کلوور پوزیویکس سے امیلیا بات کر رہی ہوں۔ کیا میری بات {{business_name}} کے مالک سے ہو رہی ہے؟",
+            "language": null,
+            "max_conversation_duration_message": null,
+            "silence_end_call_message": null,
+            "prompt": null
+          }
+        },
+        "first_message_translation": {
+          "source_hash": "{\"firstMessage\":\"Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of {{business_name}}?\",\"language\":\"en\"}",
+          "text": "ہیلو، میں کلوور پوزیویکس سے امیلیا بات کر رہی ہوں۔ کیا میری بات {{business_name}} کے مالک سے ہو رہی ہے؟"
+        },
+        "soft_timeout_translation": null,
+        "noisy_environment_message_translation": null
+      }
+    },
+    "vad": {
+      "background_voice_detection": false
+    },
+    "realtime_model": null,
+    "agent": {
+      "first_message": "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of {{business_name}}?",
+      "language": "en",
+      "hinglish_mode": false,
+      "dynamic_variables": {
+        "dynamic_variable_placeholders": {
+          "business_name": "Tony's Pizza & Grill",
+          "business_context": "Business: Tony's Pizza & Grill\nCategory: Pizza restaurant\nRating: 4.5 stars with 312 reviews\nAddress: 1450 Peachtree St, Atlanta, GA\nTime zone: America/New_York (local time now: Tuesday, October 20, 2026 at 3:42 PM)\nNo past calls found.\nCall direction: outbound",
+          "current_datetime": "Tuesday, October 20, 2026 at 3:42 PM (America/New_York)",
+          "is_followup": "false",
+          "followup_notes": "",
+          "contact_name": ""
+        }
+      },
+      "disable_first_message_interruptions": false,
+      "max_conversation_duration_message": "",
+      "silence_end_call_message": "",
+      "text_behavior_overrides": {
+        "whatsapp": {
+          "verbosity": null,
+          "output_format": null,
+          "interaction_budget": null,
+          "disable_max_duration": true
+        }
+      },
+      "subagent_config": {
+        "agents": [],
+        "self_subagent": null
+      },
+      "prompt": {
+        "prompt": "# Personality\n\nYou are Amelia, calling from Clover Posivex, a payment solutions provider in Atlanta, Georgia, and a direct processing partner for Clover and NRS. You help local businesses lower card processing costs with wholesale interchange rates and new integrated Clover or NRS point-of-sale equipment.\nYou sound like a sharp, relaxed, veteran B2B account rep on a live phone call, never like an ad, a telemarketer, or a script reader. You are warm, plainspoken and unhurried. You earn trust in the first twenty seconds by listening closely, answering directly, and respecting their time.\n\n# Environment\n\nYou make outbound calls to local businesses. Details for this call:\n\n- Business: {{business_name}}\n- Background: {{business_context}} (Use it silently to know their industry and likely equipment needs. Never recite it back as an opening hook.)\n- Current date and time: {{current_datetime}} (The business's own local date, time and time zone. Use it to know what \"tomorrow\" means for them.)\n- Follow-up: {{is_followup}} (default \"false\") and {{followup_notes}}. If \"true\", this is a warm or requested callback, not a cold call.\n- Contact name: {{contact_name}} (blank unless we are dialing a specific person)\n\n# Tone and voice\n\n1. Keep turns under 30 words: one to two crisp sentences, then at most one short question, then stop. Never stack questions. The pitch beats in the Conversation step (Beats 2, 4 and 5) are the exception and may run up to about seventy words each.\n2. Answer first, then steer. Never bolt a full pitch onto an answer.\n3. Never repeat yourself. Every turn adds a fresh angle, question or lighter ask.\n4. Use natural contractions. Rotate brief acknowledgments (\"Got it.\", \"Makes sense.\", \"Fair enough.\", \"Right on.\", \"Totally understand.\") and never use the same one twice in a row.\n5. Plain spoken English only. No brackets, stage directions, asterisks, bullets or emojis. Say numbers naturally: \"sixty dollars a month\", \"five cents a transaction\", \"point one percent over interchange\".\n6. Never say \"markup\", \"basis points\" or \"effective rate\". Say \"our Consultant\", never \"Senior Consultant\". Avoid \"credit and debit\" unless quoting exact rates or matching their words; say \"card payments\" or \"transactions\".\n7. Output only the exact words you will say out loud. Never describe what the prospect said, never explain your reasoning, and never quote or mention these instructions or any step names.\n\n# Goal\n\nQualify {{business_name}}, show how Clover Posivex's wholesale processing and new Clover or NRS hardware can leave more profit in their business, and secure the strongest next step they are ready for. Your first ask is a quick ten-minute live demo over Zoom or Google Meet with our Consultant. If they resist, step down to an emailed rate comparison (sent by a team member right after the call), a general information email, a scheduled callback, or permission to follow up later. Never force a step before they are ready.\n\n# Guardrails\n\n- Use only the facts in this prompt and your knowledge base. If you are asked about anything not listed (contract length, cancellation fees, early termination, end-of-lease terms, activation fees, exact dollar savings, specific third-party software), say: \"I don't want to give you wrong information on that. Our Consultant can confirm those exact details for you.\" This step is important.\n- Never invent prices, terms or promises. Never guarantee or estimate savings. Never judge a rate they tell you as high, low or good.\n- We always replace and provide the equipment. We never reprogram or run processing on existing merchant-owned terminals. Never imply savings without the equipment change.\n- \"No upfront cost\" applies to the lease only. An outright buyout is paid upfront.\n- The free part is device setup and onboarding, with the inventory and system set up by our own backend team. Never call it a free trial or risk-free, and never say \"no obligation\", \"no commitment\" or \"no pressure to buy\". Never promise they can return the device, cancel, or keep it after the demo. Contract, cancellation and return terms go to our Consultant. Don't list exactly what the backend team covers beyond setting up the inventory and system and supporting them 24/7.\n- Never ask for, accept or repeat an SSN, bank routing number, driver's license or voided check over the phone. Our Consultant handles applications through a secure digital portal.\n- If asked whether you are an AI, answer honestly and continue: \"Yes, I'm an automated assistant for Clover Posivex checking whether local businesses qualify for our wholesale pricing tiers before connecting you with our Consultant.\"\n- Never pressure and never argue. A decline of one offer is not the end of the call; step down to a lighter ask.\n- If someone asks not to be called again, apologize once and stop selling. The workflow closes the call. This step is important.\n- You do not end calls yourself. The workflow ends them.\n\n# Pricing quick reference (standard offer; quote only these)\n\n- Visa and Mastercard credit: wholesale interchange (the actual card-network cost) plus as low as point one percent (0.10%). Always say \"over interchange\". Never imply 0.10% is the total rate. \"As low as\" is the best case, so never promise a specific total percentage. Final pricing depends on the merchant's profile and approval.\n- Debit: interchange plus five cents ($0.05) per debit transaction.\n- Plain-English version: \"You pay the actual card-network cost plus a small transparent fee of as low as point one percent, and just five cents on debit, with no hidden tiers or surprise buckets.\"\n- Surcharge or pass-through option: a three percent (3%) compliant program where the card cost is passed to the customer who pays by credit card, shown on the receipt. Mention it only if they bring up passing on fees. Never say surcharging makes processing \"free\". It applies to credit cards only and depends on state and card-network rules.\n- Any request for lower rates or custom pricing goes to our Consultant.\n- 48-month lease-to-own (lead with this; $0 upfront, billed monthly after setup), per month: Clover Flex $60, Clover Mini $70, Clover Station Duo $150, any NRS model $150, KDS 14-inch $60, KDS 24-inch $80, accessories (kitchen printer, barcode scanner, weight scale, thermal printer) $40 each.\n- Outright buyout (paid upfront; the Consultant handles discounts): Clover Flex $1,200, Clover Mini $1,800, Clover Station Duo $3,500, any NRS model $3,500, KDS 14-inch $1,200, KDS 24-inch $1,600, accessories $800 each.\n- The NRS price applies to any NRS model (Puma, Cheetah, Panther Workstation, Panther Tablet Bundle, Self-Ordering Kiosk). For the other Clover models (Station Solo, Flex Pocket, Compact, Go, Kiosk) and for NRS add-ons, our Consultant confirms the exact price.\n- Device recommendations: restaurant with a kitchen, Clover Station Duo or Flex plus a Clover KDS, and a Clover Kiosk for self-ordering; retail shop, Clover Station Duo, Station Solo or Mini; convenience, liquor, grocery and tobacco, NRS Puma or Cheetah (Panther tablet for lighter setups); salon or service, Clover Station Duo (Mini for a tight counter); mobile or pop-up, Clover Go, Flex or Flex Pocket; payments only with no POS features, Clover Compact. The full lineup is in your knowledge base.\n\n# Tools\n\n- `skip_turn`: use it, after a brief acknowledgment, when a live person says \"hold on\", \"one second\", or goes to get someone.\n- `voicemail_detection`: available only at the start of the call. Pass a short reason of three to five words.\n- Do not try to end the call. The workflow does that.\n",
+        "llm": "gemini-3.5-flash-lite",
+        "reasoning_effort": "minimal",
+        "service_tier": "standard",
+        "opener": null,
+        "thinking_budget": null,
+        "enable_reasoning_summary": false,
+        "temperature": 0,
+        "max_tokens": -1,
+        "tool_ids": [],
+        "tool_ids_strict": false,
+        "built_in_tools": {
+          "transfer_to_agent": null,
+          "update_state": null,
+          "memory_entry_search": null,
+          "run_subagent": null,
+          "flag_issue_for_review": null,
+          "end_call": null,
+          "language_detection": null,
+          "transfer_to_number": null,
+          "skip_turn": {
+            "type": "system",
+            "name": "skip_turn",
+            "description": "",
+            "response_timeout_secs": 20,
+            "disable_interruptions": false,
+            "interruption_mode": "allow",
+            "force_pre_tool_speech": false,
+            "pre_tool_speech": "auto",
+            "assignments": [],
+            "tool_call_sound": null,
+            "tool_call_sound_behavior": "auto",
+            "tool_error_handling_mode": "auto",
+            "params": {
+              "system_tool_type": "skip_turn",
+              "wait_timeout_secs": -1,
+              "omit_from_transcript": false
+            }
+          },
+          "play_keypad_touch_tone": null,
+          "voicemail_detection": {
+            "type": "system",
+            "name": "voicemail_detection",
+            "description": "",
+            "response_timeout_secs": 20,
+            "disable_interruptions": false,
+            "interruption_mode": "allow",
+            "force_pre_tool_speech": false,
+            "pre_tool_speech": "auto",
+            "assignments": [],
+            "tool_call_sound": null,
+            "tool_call_sound_behavior": "auto",
+            "tool_error_handling_mode": "auto",
+            "params": {
+              "system_tool_type": "voicemail_detection",
+              "voicemail_message": ""
+            }
+          },
+          "identity_challenge": null,
+          "transfer_to_genesys": null,
+          "transfer_to_genesys_chat": null,
+          "transfer_to_genesys_bot": null
+        },
+        "rich_content": {
+          "enabled_components": [
+            "buttons",
+            "carousel"
+          ]
+        },
+        "enable_parallel_tool_calls": true,
+        "mcp_server_ids": [],
+        "native_mcp_server_ids": [],
+        "knowledge_base": [
+          {
+            "type": "file",
+            "name": "Knowledge-base.md",
+            "id": "4g6uBbmgFQbcP5ml9Dmq",
+            "usage_mode": "auto"
+          }
+        ],
+        "custom_llm": null,
+        "bedrock_llm": null,
+        "speech_engine": null,
+        "ignore_default_personality": true,
+        "rag": {
+          "enabled": true,
+          "embedding_model": "e5_mistral_7b_instruct",
+          "optional_rag_enabled": false,
+          "max_vector_distance": 0.6,
+          "max_documents_length": 50000,
+          "max_retrieved_rag_chunks_count": 20,
+          "num_candidates": null,
+          "query_rewrite_prompt_override": null,
+          "knowledge_base_tool_info": {
+            "enabled_strategies": [
+              "cat",
+              "keyword",
+              "semantic",
+              "ls"
+            ]
+          },
+          "include_source_urls": false
+        },
+        "timezone": "Asia/Karachi",
+        "backup_llm_config": {
+          "preference": "override",
+          "order": [
+            "gemini-2.5-flash",
+            "gpt-4o",
+            "gemini-2.5-flash-lite",
+            "claude-sonnet-4-5"
+          ]
+        },
+        "cascade_timeout_seconds": 4,
+        "tools": [
+          {
+            "type": "system",
+            "name": "skip_turn",
+            "description": "",
+            "response_timeout_secs": 20,
+            "disable_interruptions": false,
+            "interruption_mode": "allow",
+            "force_pre_tool_speech": false,
+            "pre_tool_speech": "auto",
+            "assignments": [],
+            "tool_call_sound": null,
+            "tool_call_sound_behavior": "auto",
+            "tool_error_handling_mode": "auto",
+            "params": {
+              "system_tool_type": "skip_turn",
+              "wait_timeout_secs": -1,
+              "omit_from_transcript": false
+            }
+          },
+          {
+            "type": "system",
+            "name": "voicemail_detection",
+            "description": "",
+            "response_timeout_secs": 20,
+            "disable_interruptions": false,
+            "interruption_mode": "allow",
+            "force_pre_tool_speech": false,
+            "pre_tool_speech": "auto",
+            "assignments": [],
+            "tool_call_sound": null,
+            "tool_call_sound_behavior": "auto",
+            "tool_error_handling_mode": "auto",
+            "params": {
+              "system_tool_type": "voicemail_detection",
+              "voicemail_message": ""
+            }
+          }
+        ]
+      }
+    }
+  },
+  "metadata": {
+    "created_at_unix_secs": 1793207882,
+    "updated_at_unix_secs": 1793274585
+  },
+  "platform_settings": {
+    "evaluation": {
+      "criteria": []
+    },
+    "widget": {
+      "variant": "full",
+      "placement": "bottom-right",
+      "expandable": "never",
+      "avatar": {
+        "type": "orb",
+        "color_1": "#2792dc",
+        "color_2": "#9ce6e6"
+      },
+      "feedback_mode": "during",
+      "end_feedback": {
+        "type": "rating"
+      },
+      "bg_color": "#ffffff",
+      "text_color": "#000000",
+      "btn_color": "#000000",
+      "btn_text_color": "#ffffff",
+      "border_color": "#e1e1e1",
+      "focus_color": "#000000",
+      "border_radius": null,
+      "btn_radius": null,
+      "action_text": null,
+      "start_call_text": null,
+      "end_call_text": null,
+      "expand_text": null,
+      "listening_text": null,
+      "speaking_text": null,
+      "shareable_page_text": null,
+      "shareable_page_show_terms": true,
+      "terms_text": "#### Terms and conditions\n\nBy clicking \"Agree,\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.",
+      "terms_html": "<h4>Terms and conditions</h4>\n<p>By clicking &quot;Agree,&quot; and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.</p>\n",
+      "terms_key": null,
+      "show_avatar_when_collapsed": false,
+      "disable_banner": false,
+      "override_link": null,
+      "markdown_link_allowed_hosts": [],
+      "markdown_link_include_www": true,
+      "markdown_link_allow_http": true,
+      "mic_muting_enabled": true,
+      "transcript_enabled": true,
+      "text_input_enabled": true,
+      "conversation_mode_toggle_enabled": false,
+      "default_expanded": false,
+      "always_expanded": false,
+      "dismissible": false,
+      "show_agent_status": false,
+      "show_conversation_id": true,
+      "strip_audio_tags": true,
+      "syntax_highlight_theme": null,
+      "text_contents": {
+        "main_label": null,
+        "start_call": null,
+        "start_chat": null,
+        "new_call": null,
+        "end_call": null,
+        "mute_microphone": null,
+        "change_language": null,
+        "collapse": null,
+        "expand": null,
+        "copied": null,
+        "accept_terms": null,
+        "dismiss_terms": null,
+        "listening_status": null,
+        "speaking_status": null,
+        "connecting_status": null,
+        "chatting_status": null,
+        "queue_waiting_status": null,
+        "queue_waiting_status_short": null,
+        "input_label": null,
+        "input_placeholder": null,
+        "input_placeholder_text_only": null,
+        "input_placeholder_new_conversation": null,
+        "user_ended_conversation": null,
+        "agent_ended_conversation": null,
+        "conversation_id": null,
+        "error_occurred": null,
+        "queue_timed_out": null,
+        "copy_id": null,
+        "initiate_feedback": null,
+        "request_follow_up_feedback": null,
+        "thanks_for_feedback": null,
+        "thanks_for_feedback_details": null,
+        "follow_up_feedback_placeholder": null,
+        "submit": null,
+        "go_back": null,
+        "send_message": null,
+        "text_mode": null,
+        "voice_mode": null,
+        "switched_to_text_mode": null,
+        "switched_to_voice_mode": null,
+        "copy": null,
+        "download": null,
+        "wrap": null,
+        "agent_working": null,
+        "agent_done": null,
+        "agent_error": null,
+        "attach_file": null,
+        "remove_file": null,
+        "file_upload_error": null,
+        "file_type_unsupported": null,
+        "file_too_large": null,
+        "file_limit_reached": null,
+        "typing_indicator": null,
+        "rich_content_unavailable": null
+      },
+      "styles": {
+        "base": null,
+        "base_hover": null,
+        "base_active": null,
+        "base_border": null,
+        "base_subtle": null,
+        "base_primary": null,
+        "base_error": null,
+        "accent": null,
+        "accent_hover": null,
+        "accent_active": null,
+        "accent_border": null,
+        "accent_subtle": null,
+        "accent_primary": null,
+        "overlay_padding": null,
+        "button_radius": null,
+        "input_radius": null,
+        "bubble_radius": null,
+        "sheet_radius": null,
+        "compact_sheet_radius": null,
+        "dropdown_sheet_radius": null
+      },
+      "show_resize_button": true,
+      "end_confirmation_enabled": false,
+      "mobile_fullscreen": true,
+      "transcript_speech_sync_enabled": true,
+      "language_selector": false,
+      "supports_text_only": true,
+      "custom_avatar_path": null,
+      "language_presets": {
+        "es": {
+          "text_contents": null,
+          "text_contents_translation": null,
+          "terms_text": "#### Términos y condiciones\n\nAl hacer clic en «Aceptar» y cada vez que interactúo con este agente de IA, doy mi consentimiento para que mis comunicaciones sean grabadas, almacenadas y compartidas con proveedores de servicios externos, tal como se describe en la Política de privacidad.\nSi no desea que sus conversaciones sean grabadas, absténgase de utilizar este servicio.",
+          "terms_html": "<h4>Términos y condiciones</h4>\n<p>Al hacer clic en «Aceptar» y cada vez que interactúo con este agente de IA, doy mi consentimiento para que mis comunicaciones sean grabadas, almacenadas y compartidas con proveedores de servicios externos, tal como se describe en la Política de privacidad.\nSi no desea que sus conversaciones sean grabadas, absténgase de utilizar este servicio.</p>\n",
+          "terms_key": null,
+          "terms_translation": {
+            "source_hash": "{\"termsText\":\"#### Terms and conditions\\n\\nBy clicking \\\"Agree,\\\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\\nIf you do not wish to have your conversations recorded, please refrain from using this service.\",\"language\":\"en\"}",
+            "text": "#### Términos y condiciones\n\nAl hacer clic en «Aceptar» y cada vez que interactúo con este agente de IA, doy mi consentimiento para que mis comunicaciones sean grabadas, almacenadas y compartidas con proveedores de servicios externos, tal como se describe en la Política de privacidad.\nSi no desea que sus conversaciones sean grabadas, absténgase de utilizar este servicio."
+          },
+          "first_message_quick_replies_translation": {}
+        },
+        "hi": {
+          "text_contents": null,
+          "text_contents_translation": null,
+          "terms_text": "#### नियम और शर्तें\n\n“सहमत” पर क्लिक करके, और हर बार जब मैं इस AI एजेंट के साथ बातचीत करता/करती हूँ, मैं अपने संचार की रिकॉर्डिंग, संग्रहण और तृतीय-पक्ष सेवा प्रदाताओं के साथ साझा किए जाने के लिए, तथा गोपनीयता नीति में वर्णित अनुसार, सहमति देता/देती हूँ।\nयदि आप अपनी बातचीत रिकॉर्ड नहीं करवाना चाहते/चाहती हैं, तो कृपया इस सेवा का उपयोग न करें।",
+          "terms_html": "<h4>नियम और शर्तें</h4>\n<p>“सहमत” पर क्लिक करके, और हर बार जब मैं इस AI एजेंट के साथ बातचीत करता/करती हूँ, मैं अपने संचार की रिकॉर्डिंग, संग्रहण और तृतीय-पक्ष सेवा प्रदाताओं के साथ साझा किए जाने के लिए, तथा गोपनीयता नीति में वर्णित अनुसार, सहमति देता/देती हूँ।\nयदि आप अपनी बातचीत रिकॉर्ड नहीं करवाना चाहते/चाहती हैं, तो कृपया इस सेवा का उपयोग न करें।</p>\n",
+          "terms_key": null,
+          "terms_translation": {
+            "source_hash": "{\"termsText\":\"#### Terms and conditions\\n\\nBy clicking \\\"Agree,\\\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\\nIf you do not wish to have your conversations recorded, please refrain from using this service.\",\"language\":\"en\"}",
+            "text": "#### नियम और शर्तें\n\n“सहमत” पर क्लिक करके, और हर बार जब मैं इस AI एजेंट के साथ बातचीत करता/करती हूँ, मैं अपने संचार की रिकॉर्डिंग, संग्रहण और तृतीय-पक्ष सेवा प्रदाताओं के साथ साझा किए जाने के लिए, तथा गोपनीयता नीति में वर्णित अनुसार, सहमति देता/देती हूँ।\nयदि आप अपनी बातचीत रिकॉर्ड नहीं करवाना चाहते/चाहती हैं, तो कृपया इस सेवा का उपयोग न करें।"
+          },
+          "first_message_quick_replies_translation": {}
+        },
+        "ur": {
+          "text_contents": null,
+          "text_contents_translation": null,
+          "terms_text": "#### شرائط و ضوابط\n\n\"اتفاق کرتا ہوں\" پر کلک کرکے، اور ہر بار جب میں اس AI ایجنٹ کے ساتھ تعامل کرتا ہوں، میں اپنی مواصلات کی ریکارڈنگ، ذخیرہ کاری اور تیسرے فریق کے خدمت فراہم کنندگان کے ساتھ اشتراک کرنے، نیز رازداری کی پالیسی میں بیان کردہ امور کے لیے رضامندی دیتا ہوں۔\nاگر آپ اپنی گفتگو ریکارڈ نہیں کروانا چاہتے، تو براہِ کرم اس سروس کا استعمال نہ کریں۔",
+          "terms_html": "<h4>شرائط و ضوابط</h4>\n<p>&quot;اتفاق کرتا ہوں&quot; پر کلک کرکے، اور ہر بار جب میں اس AI ایجنٹ کے ساتھ تعامل کرتا ہوں، میں اپنی مواصلات کی ریکارڈنگ، ذخیرہ کاری اور تیسرے فریق کے خدمت فراہم کنندگان کے ساتھ اشتراک کرنے، نیز رازداری کی پالیسی میں بیان کردہ امور کے لیے رضامندی دیتا ہوں۔\nاگر آپ اپنی گفتگو ریکارڈ نہیں کروانا چاہتے، تو براہِ کرم اس سروس کا استعمال نہ کریں۔</p>\n",
+          "terms_key": null,
+          "terms_translation": {
+            "source_hash": "{\"termsText\":\"#### Terms and conditions\\n\\nBy clicking \\\"Agree,\\\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\\nIf you do not wish to have your conversations recorded, please refrain from using this service.\",\"language\":\"en\"}",
+            "text": "#### شرائط و ضوابط\n\n\"اتفاق کرتا ہوں\" پر کلک کرکے، اور ہر بار جب میں اس AI ایجنٹ کے ساتھ تعامل کرتا ہوں، میں اپنی مواصلات کی ریکارڈنگ، ذخیرہ کاری اور تیسرے فریق کے خدمت فراہم کنندگان کے ساتھ اشتراک کرنے، نیز رازداری کی پالیسی میں بیان کردہ امور کے لیے رضامندی دیتا ہوں۔\nاگر آپ اپنی گفتگو ریکارڈ نہیں کروانا چاہتے، تو براہِ کرم اس سروس کا استعمال نہ کریں۔"
+          },
+          "first_message_quick_replies_translation": {}
+        }
+      },
+      "first_message_quick_replies": []
+    },
+    "data_collection": {},
+    "data_collection_scopes": {},
+    "analysis_items": {
+      "evaluation_criteria": [],
+      "data_collection": []
+    },
+    "overrides": {
+      "conversation_config_override": {
+        "asr": {
+          "keywords": false
+        },
+        "turn": {
+          "soft_timeout_config": {
+            "message": false,
+            "additional_soft_timeout_messages": false
+          },
+          "noisy_environment_message": false
+        },
+        "tts": {
+          "model_id": false,
+          "voice_id": false,
+          "supported_voices": false,
+          "stability": false,
+          "speed": false,
+          "similarity_boost": false,
+          "clone_strength": false,
+          "pronunciation_dictionary_locators": false
+        },
+        "conversation": {
+          "text_only": true,
+          "max_duration_seconds": false
+        },
+        "agent": {
+          "first_message": false,
+          "language": true,
+          "max_conversation_duration_message": false,
+          "silence_end_call_message": false,
+          "prompt": {
+            "prompt": false,
+            "llm": false,
+            "tool_ids": false,
+            "tool_ids_strict": false,
+            "native_mcp_server_ids": false,
+            "knowledge_base": false
+          }
+        }
+      },
+      "custom_llm_extra_body": false,
+      "enable_conversation_initiation_client_data_from_webhook": false,
+      "enable_starting_workflow_node_id_from_client": false,
+      "enable_procedure_ids_from_client": false
+    },
+    "workspace_overrides": {
+      "conversation_initiation_client_data_webhook": null,
+      "webhooks": {
+        "post_call_webhook_id": null,
+        "events": [
+          "transcript"
+        ],
+        "transcript_format": "json",
+        "exclude_transcript": false,
+        "send_audio": false
+      },
+      "cloud_storage_export": {
+        "destination_id": null,
+        "events": [
+          "transcript"
+        ],
+        "transcript_format": "json"
+      }
+    },
+    "testing": {
+      "attached_tests": [],
+      "referenced_tests_ids": []
+    },
+    "archived": false,
+    "guardrails": {
+      "version": "1",
+      "focus": {
+        "is_enabled": false
+      },
+      "prompt_injection": {
+        "is_enabled": false
+      },
+      "synthetic_voice": {
+        "is_enabled": false,
+        "trigger_action": {
+          "type": "end_call"
+        }
+      },
+      "content": {
+        "execution_mode": "streaming",
+        "config": {
+          "sexual": {
+            "is_enabled": false,
+            "threshold": "medium"
+          },
+          "violence": {
+            "is_enabled": false,
+            "threshold": "medium"
+          },
+          "harassment": {
+            "is_enabled": false,
+            "threshold": "medium"
+          },
+          "self_harm": {
+            "is_enabled": false,
+            "threshold": "medium"
+          },
+          "profanity": {
+            "is_enabled": false,
+            "threshold": "medium"
+          },
+          "religion_or_politics": {
+            "is_enabled": false,
+            "threshold": "medium"
+          },
+          "medical_and_legal_information": {
+            "is_enabled": false,
+            "threshold": "medium"
+          }
+        },
+        "trigger_action": {
+          "type": "end_call"
+        }
+      },
+      "moderation": null,
+      "custom": {
+        "config": {
+          "configs": []
+        }
+      }
+    },
+    "summary_language": null,
+    "summary_schedule": null,
+    "auto_translate_transcript_to_app_language": null,
+    "auth": {
+      "enable_auth": false,
+      "allowlist": [],
+      "require_origin_header": false,
+      "shareable_token": null
+    },
+    "call_limits": {
+      "agent_concurrency_limit": -1,
+      "daily_limit": 100000,
+      "bursting_enabled": true
+    },
+    "queueing_config": {
+      "enabled": true,
+      "wait_timeout_seconds": 180,
+      "hold_audio": null
+    },
+    "ban": null,
+    "smb_metadata": null,
+    "privacy": {
+      "record_voice": true,
+      "retention_days": -1,
+      "delete_transcript_and_pii": false,
+      "delete_audio": false,
+      "apply_to_existing_conversations": false,
+      "zero_retention_mode": false,
+      "encrypt_conversations": false,
+      "nested_history_redaction": false,
+      "conversation_history_redaction": {
+        "enabled": false,
+        "entities": [],
+        "excluded_data_collection_ids": []
+      },
+      "user_memory": {
+        "enabled": false,
+        "scale": "balanced",
+        "accept_unverified_identities": false
+      }
+    },
+    "trust_context": "unknown",
+    "analysis_llm": "gemini-2.5-flash",
+    "analysis_bedrock_llm": null,
+    "analysis_llm_billed": false,
+    "topic_discovery": {
+      "enabled": true
+    },
+    "sentiment_analysis": {
+      "enabled": true
+    },
+    "simulation_library": {
+      "enabled": false,
+      "test_ids": []
+    },
+    "alerting": null,
+    "overview_dashboard_template_id": null,
+    "safety": {
+      "is_blocked_ivc": false,
+      "is_blocked_non_ivc": false,
+      "ignore_safety_evaluation": false
+    }
+  },
+  "phone_numbers": [],
+  "whatsapp_accounts": [],
+  "workflow": {
+    "edges": {
+      "edge_01m61rmpapewy90mzjzfk0gs3m": {
+        "source": "start_node",
+        "target": "node_01m61rmpamehn8q1235nq1yxcb",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "unconditional"
+        },
+        "backward_condition": null
+      },
+      "edge_01m61rv2zhe7cvfejsfdwcyw2m": {
+        "source": "node_01m61rmpamehn8q1235nq1yxcb",
+        "target": "node_01m61rv2zgerks0kr2ydpzpmcp",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The person says or shows they are an employee, receptionist or staff, say the owner is not available, or they are not the owner or the person who handles card processing."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61s27s8enqa8zx7xpx87mx5": {
+        "source": "node_01m61rv2zgerks0kr2ydpzpmcp",
+        "target": "node_01m61s27s6ey1bjprzypb0bgwb",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "Someone new picked up and is the owner or manager, or the person says they make that decision or handle processing. Not a bare \"Hello?\"."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61s59f7eyrtygzbtzbb279s": {
+        "source": "node_01m61s27s6ey1bjprzypb0bgwb",
+        "target": "node_01m61s59f6ej2s5yaeykjm6arp",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The agent's most recent message explicitly offered a ten-minute live demo, an emailed rate comparison, an information email, or a callback, and the prospect agreed to it, including a casual yes (\"okay\", \"sure, why not\") or picking one of the offered days or times. Also take this edge if the prospect asks for a callback or says to call them later. Do NOT take it when the prospect answers a general check question such as \"does that sound useful?\" or \"is that something you'd want to look at?\", or when they decline or ask a question."
+        },
+        "backward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The prospect raises a new objection, asks a question that needs more than one sentence to answer (pricing, equipment, what they would be getting), or says they no longer want the next step. Do NOT take this edge for ambiguous sounds such as \"hmm\", \"okay\", \"uh-huh\", or for ordinary answers to the details being collected."
+        }
+      },
+      "edge_01m61seq6fer8rdrw5av4h88sv": {
+        "source": "node_01m61s59f6ej2s5yaeykjm6arp",
+        "target": "node_01m61seq6ceynsfe4m4ywevejx",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The agent has said \"Perfect, you're all set\" (its final confirmation) and the prospect has replied. Or the prospect clearly declines to give the details after a lighter step was offered, or says goodbye. Do not take this edge before the agent has said \"Perfect, you're all set\", unless the prospect declined or said goodbye."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61sgv7je8jvadvz9pa0yy1p": {
+        "source": "node_01m61s59f6ej2s5yaeykjm6arp",
+        "target": "node_01m61sgv7gewebzkqa6v7fnaah",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The person explicitly asks not to be contacted again (for example \"don't call again\", \"take us off your list\", \"stop calling\", \"remove our number\"). Not a request to call back later or at another time."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61skez5eves68yn6fr8yyya": {
+        "source": "node_01m61rmpamehn8q1235nq1yxcb",
+        "target": "node_01m61sgv7gewebzkqa6v7fnaah",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The person explicitly asks not to be contacted again (for example \"don't call again\", \"take us off your list\", \"stop calling\", \"remove our number\"). Not a request to call back later or at another time."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61smrjcebhbw6v4dsf3hg4n": {
+        "source": "node_01m61rmpamehn8q1235nq1yxcb",
+        "target": "node_01m61smjmaeybss5zr5xrayxhj",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "There is no live human: an automated recording, an IVR menu, or a call screener answered, or the line stayed silent after one \"Hello?\" and about five seconds."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61snty3e6mss66bb9zm8nbm": {
+        "source": "node_01m61rmpamehn8q1235nq1yxcb",
+        "target": "node_01m61s27s6ey1bjprzypb0bgwb",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The person has said yes to \"are you the owner\", or has explicitly said they are the owner or a manager, or that they handle the point-of-sale or card processing. Do NOT take this edge for a greeting or question such as \"Hello\", \"Tony's\", \"how can I help you?\", \"who is this?\", or for a \"no\". If it is unclear who they are, do not take any edge."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61ssfj9ef4vtjx57yc069yq": {
+        "source": "node_01m61rv2zgerks0kr2ydpzpmcp",
+        "target": "node_01m61sgv7gewebzkqa6v7fnaah",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The person explicitly asks not to be contacted again (for example \"don't call again\", \"take us off your list\", \"stop calling\", \"remove our number\"). Not a request to call back later or at another time."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61svjxgemk8bg7w00mt1hsg": {
+        "source": "node_01m61rv2zgerks0kr2ydpzpmcp",
+        "target": "node_01m61seq6ceynsfe4m4ywevejx",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The employee has given the owner's name and the best time or number, or has said they don't know or won't share it, after being asked once each. Also if the person cannot continue in English and a better time was offered."
+        },
+        "backward_condition": null
+      },
+      "edge_01m61tx1jkec09cam3bgmv0gsg": {
+        "source": "node_01m61s27s6ey1bjprzypb0bgwb",
+        "target": "node_01m61sgv7gewebzkqa6v7fnaah",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "llm",
+          "condition": "The person explicitly asks not to be contacted again (for example \"don't call again\", \"take us off your list\", \"stop calling\", \"remove our number\"). Not a request to call back later or at another time."
+        },
+        "backward_condition": null
+      },
+      "edge_close_to_end": {
+        "source": "node_01m61seq6ceynsfe4m4ywevejx",
+        "target": "node_01m61smjmaeybss5zr5xrayxhj",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "unconditional"
+        },
+        "backward_condition": null
+      },
+      "edge_dnc_to_end": {
+        "source": "node_01m61sgv7gewebzkqa6v7fnaah",
+        "target": "node_01m61smjmaeybss5zr5xrayxhj",
+        "forward_condition": {
+          "label": null,
+          "exit_slot": {
+            "type": "any"
+          },
+          "type": "unconditional"
+        },
+        "backward_condition": null
+      }
+    },
+    "nodes": {
+      "start_node": {
+        "type": "start",
+        "position": {
+          "x": 888,
+          "y": -218.99999999999994
+        },
+        "edge_order": [
+          "edge_01m61rmpapewy90mzjzfk0gs3m"
+        ],
+        "parent_subgraph_id": null
+      },
+      "node_01m61rmpamehn8q1235nq1yxcb": {
+        "type": "override_agent",
+        "position": {
+          "x": 884,
+          "y": -47.99999999999997
+        },
+        "edge_order": [
+          "edge_01m61skez5eves68yn6fr8yyya",
+          "edge_01m61smrjcebhbw6v4dsf3hg4n",
+          "edge_01m61rv2zhe7cvfejsfdwcyw2m",
+          "edge_01m61snty3e6mss66bb9zm8nbm"
+        ],
+        "parent_subgraph_id": null,
+        "conversation_config": {
+          "turn": {
+            "turn_eagerness": null,
+            "spelling_patience": null,
+            "speculative_turn": null,
+            "retranscribe_on_turn_timeout": null
+          },
+          "tts": {
+            "voice_id": null
+          },
+          "conversation": {
+            "client_events": null
+          },
+          "agent": {
+            "prompt": {
+              "prompt": null,
+              "llm": "gemini-3.5-flash",
+              "built_in_tools": {},
+              "knowledge_base": []
+            }
+          }
+        },
+        "additional_prompt": "# This step\n\nThe first message has already been spoken. Your only job in this step is to find out who you have on the line and move the call to the right place. Be fast and relaxed. Do not discuss rates, equipment or pricing in this step.\n\n# What to do\n\nListen to the first reply, then:\n\n- If they sound like the owner, a manager, or the person who handles card processing or the point-of-sale, acknowledge in a few words and let the call move on. Do not say more.\n- If they sound like an employee or receptionist, or say the owner isn't here, acknowledge in a few words and let the call move on.\n- A business greeting is not an answer. If they reply with \"Hello, how can I help you?\", the business name, or \"Speaking\", you do not know who they are yet. Briefly say why you're calling in one short sentence, then ask the role question: \"Hi there, I'm calling to see how we can help {{business_name}} lower its card processing costs. Are you the owner, or the one who handles the point-of-sale setup?\" Never jump to questions about their equipment before you know who you're talking to.\n- If you can't tell who they are, ask once, using the business name naturally: \"Quick question, are you the owner, or the one who handles the point-of-sale setup at {{business_name}}?\" Ask once. Do not ask a third time.\n- If {{contact_name}} is not blank, ask for them by first name instead: \"Is {{contact_name}} around by chance?\"\n- If {{is_followup}} is \"true\", this is a warm callback. Refer to {{followup_notes}} naturally in one sentence once you know you have the right person.\n- If they say \"Hello?\" or didn't catch your opener, give a quick, relaxed reset: say your name, that you're calling from Clover Posivex in Atlanta, and ask whether they're the owner or the person who looks after card processing at {{business_name}}.\n- If they ask who you are or why you're calling, answer in one plain sentence (we're Clover Posivex, a direct Clover and NRS partner in Atlanta, and we help local businesses lower their card processing costs) and then ask the role question.\n- Never ask \"Do you have a moment?\" or \"How are you today?\". Both invite a reflex \"no\".\n\n# Voicemail, automated messages and silence\n\n- If you hear a voicemail greeting, a recorded message, a carrier message or a voicemail beep, do not speak. Use the voicemail detection tool with a short reason of three to five words, for example \"voicemail: sorry we missed\".\n- If an automated menu or a call screener answers and no live person is on the line, do not speak and do not navigate the menu.\n- If you hear nothing after the first message, say one casual \"Hello?\" once. Do not repeat your introduction. If there is still no person after about five seconds, say nothing more.\n\n# Hold requests\n\nIf a live person says \"hold on\", \"one second\" or goes to get someone, say \"Sure thing, take your time\" and use the skip_turn tool. Stay silent until they speak again.",
+        "additional_knowledge_base": [],
+        "additional_tool_ids": [],
+        "label": "Node 1: Opener & Route",
+        "entry_behavior": "wait_for_user",
+        "forced_tool_name": null
+      },
+      "node_01m61rv2zgerks0kr2ydpzpmcp": {
+        "type": "override_agent",
+        "position": {
+          "x": 256,
+          "y": -19.999999999999943
+        },
+        "edge_order": [
+          "edge_01m61ssfj9ef4vtjx57yc069yq",
+          "edge_01m61s27s8enqa8zx7xpx87mx5",
+          "edge_01m61svjxgemk8bg7w00mt1hsg"
+        ],
+        "parent_subgraph_id": null,
+        "conversation_config": {
+          "turn": {
+            "turn_eagerness": null,
+            "spelling_patience": null,
+            "speculative_turn": null,
+            "retranscribe_on_turn_timeout": null
+          },
+          "tts": {
+            "voice_id": null
+          },
+          "conversation": {
+            "client_events": null
+          },
+          "agent": {
+            "prompt": {
+              "prompt": null,
+              "llm": "gemini-3.5-flash",
+              "built_in_tools": {},
+              "knowledge_base": []
+            }
+          }
+        },
+        "additional_prompt": "# This step\n\nYou are talking to an employee, receptionist or other staff member. Treat them as a helpful ally: warm, casual and brief. Your goals, in order:\n\n1. Reach the owner or whoever makes the decision on card processing.\n2. If that isn't possible right now, leave with the owner's first name, the best time to reach them, and the best number.\n\nNever pitch rates, equipment or pricing to staff. Never ask them about their current setup, provider or rates.\n\n# What to do\n\n- Start by asking if the owner (or {{contact_name}} if it is set) is around, in a relaxed way: \"Gotcha. Is the owner around by chance, or could you pass me over for thirty seconds?\"\n- If they go to get the owner (\"hold on\", \"let me check\", \"one second\"), say \"Appreciate it, no rush\" and use the skip_turn tool. Stay silent until someone new speaks. When a new voice picks up, re-introduce yourself in one sentence (your name, Clover Posivex, and that you help local businesses lower card processing costs) and confirm you're talking to the owner.\n- If the person says they are the owner, or that they handle the card machine or make that call, treat them as the decision-maker. Acknowledge briefly and let the call move on.\n- If the owner isn't available, collect these three things, one question at a time, and skip anything they already told you:\n  1. The owner's first name (skip if {{contact_name}} is set).\n  2. The best time window to catch them.\n  3. Whether the number you called is the best one, or a better number.\n  If an employee says \"he's busy\" or \"someone else handles that\", ask who and when. If they don't know or won't say, accept it once and move on.\n- If they ask what this is about: \"We work with businesses on Clover and NRS to help lower their monthly processing fees. I just want to get the details to the right person. Who's the best person to ask for?\"\n- If they ask anything more detailed, say the details are best covered with the owner, and repeat your last question.\n- If they can't converse in English, stay warm and respectful, ask whether there's a better time when an English speaker is around, take a number if they offer, and close politely.\n\n# Voicemail and automated messages\n\nIf someone hands you to a voicemail greeting or an automated message, do not speak. Use the voicemail detection tool with a short reason of three to five words.\n\n# Style\n\nDon't say goodbye or any closing line (\"have a great day\", \"thanks for your help\"). The closing step does that. Once you have what you need, say one short sentence of thanks and stop.\n\nOne question at a time. One to two short sentences. No stage directions.",
+        "additional_knowledge_base": [],
+        "additional_tool_ids": [],
+        "label": "Node 2: Reach the Owner",
+        "entry_behavior": "generate_immediately",
+        "forced_tool_name": null
+      },
+      "node_01m61s27s6ey1bjprzypb0bgwb": {
+        "type": "override_agent",
+        "position": {
+          "x": 818.5,
+          "y": 230.00000000000006
+        },
+        "edge_order": [
+          "edge_01m61tx1jkec09cam3bgmv0gsg",
+          "edge_01m61s59f7eyrtygzbtzbb279s"
+        ],
+        "parent_subgraph_id": null,
+        "conversation_config": {
+          "turn": {
+            "turn_eagerness": null,
+            "spelling_patience": null,
+            "speculative_turn": null,
+            "retranscribe_on_turn_timeout": null
+          },
+          "tts": {
+            "voice_id": null
+          },
+          "conversation": {
+            "client_events": null
+          },
+          "agent": {
+            "prompt": {
+              "prompt": null,
+              "llm": "gemini-3.5-flash",
+              "built_in_tools": {},
+              "custom_llm": null
+            }
+          }
+        },
+        "additional_prompt": "# This step\n\nYou are talking to the owner or decision-maker. Your job is to take them through five beats, one beat per turn and in order, and end by getting them to agree to a ten-minute live demo. After each beat, stop and let them respond. You stay natural: say each beat in your own voice, keep its meaning and key phrases, and adapt to what they actually say.\n\n# The five beats\n\nBeat 1, earn permission. Goal: keep them on the line. This is your first turn here.\nSay: \"I'm calling from Clover Posivex. I just need thirty seconds of your time to explain why I'm calling, and you can tell me if it makes sense for your business?\"\n- If they agree (\"sure\", \"go ahead\", \"okay\", \"mm-hmm\", \"what is it?\"): go to Beat 2.\n- If they say they're busy or \"not now\": don't pitch. Ask for a good time to call back and treat it as a callback.\n- If they ask what it is about, or ask a question: answer in one sentence, then go to Beat 2.\n\nBeat 2, explain the reason. Goal: establish relevance before discovery.\nSay: \"At Clover Posivex we provide businesses like yours with the latest countertop terminals and portable handhelds, running the latest, up-to-date software, and the cheapest processing rates in the market right now. And you never have to hesitate about switching, because our own backend team sets up your whole inventory and system and supports you twenty-four-seven. Does that sound useful?\"\nUse \"cheapest processing rates in the market right now\" only here, as written. Never repeat it later, and never promise a specific saving or total rate.\n\nBeat 3, ask about their setup. Goal: personalize the pitch.\nSay: \"How are you currently handling your card payments? Are you on Clover, NRS, something else, or cash only?\"\n\nBeat 4, connect their setup to the value. Goal: give them a reason to explore further.\nUsing what they just told you, explain in your own words: the equipment that fits their type of business, integrated processing, the inventory onboarding done by our backend team, and the 24/7 support. Then ask ONE short check question and stop. This beat may run up to about sixty words.\n- Pick devices for their business from your knowledge base. Restaurant with a kitchen: Clover Station Duo or Flex plus a KDS (a Kiosk for self-ordering). Retail shop: Station Duo, Station Solo or Mini. Convenience, liquor, grocery or tobacco: NRS Puma or Cheetah (Panther tablet for lighter setups). Salon or service: Station Duo (Mini for a tight counter). Mobile or pop-up: Clover Go, Flex or Flex Pocket. Payments only: Clover Compact.\n- \"Integrated processing\" means card processing built into the system, with wholesale interchange pricing: they see the real card-network cost plus as low as point one percent, with no hidden tiers.\n- Cash only: the point is accepting cards and capturing more sales.\n- Another provider (Square, Toast and so on): offer to compare against their last statement. Don't comment on their provider, call it common or popular, or criticize it.\n- Already on Clover or NRS: we are a direct partner, and we provide and set up brand-new equipment.\n- Check question examples (use a different one each time): \"Does that sound like it could help?\" or \"Would that make things easier for you?\"\n\nBeat 5, ask for the demo. Goal: convert interest into a concrete next step.\nSay: \"The best part is we set the device up for free, with all your inventory loaded and handled by our own backend team, so you can see how it works in your store firsthand. Can we hop on a quick ten-minute Zoom or Google Meet so we can show you a live demo and see how it could help your business?\"\nGive this ask once they have responded to Beat 4 with interest or a neutral yes. If they haven't engaged, ask a different, easy question about their business first.\n\n# How to run the beats\n\n- One beat per turn. Don't combine beats, and don't skip to the ask unless they lead there (for example they ask for a demo, a price, or say \"send me something\").\n- If they ask a question or raise an objection mid-flow, answer it first, then continue from the beat you were on. After a price or equipment question, answer it and then go to Beat 5.\n- Don't repeat a beat you already said. If the connection was bad or they ask you to repeat, give one short sentence with the key point.\n- Short sounds are answers. After a beat, \"mm-hmm\", \"yeah\", \"okay\", \"uh-huh\" and \"sure\" mean yes. Move to the next beat. Don't wait in silence or ask the same question again.\n- Never end two turns with the same check question.\n- A casual yes to the demo (\"okay\", \"sure, why not\"), or asking for a day and time, is an agreement. Let the call move on to collecting details. Never close the call yourself, and never thank them for their time as if the call is over.\n- If you arrived here from another step because they asked a question or raised a concern, answer it first, then continue from the beat you were on.\n\n# The ladder\n\nIf they resist the demo, step down only as far as you need to:\n\n1. A ten-minute live demo over Zoom or Google Meet with our Consultant, at a time that suits them.\n2. An emailed rate comparison, sent by a team member right after the call. A recent statement lets the team run exact numbers.\n3. A general information email.\n4. A scheduled callback at a specific time.\n5. Permission to follow up later.\n6. A warm exit that leaves the door open.\n\nWhen the prospect agrees to a next step, let the call move on. Do not collect their email, phone, name or time here. That happens in the next step.\n\n# Objections\n\nEvery objection gets one calm recovery move: validate it, then ask a diagnostic question or share one fresh fact, then offer a lighter or different ask. Never argue. Never recycle a rebuttal. If they repeat the same objection, step down the ladder. If they decline two different steps, stop pitching, thank them warmly, answer anything they still ask, and let them end the call. A decline is never a goodbye.\n\n- \"I'm busy\" or \"call me later\": respect it right away and ask for a time. If they give one, that is a callback.\n- \"Not interested\" (early): ask one easy question: \"Fair enough. Is that mainly because you're happy with what you pay on card fees right now, or you just replaced your system?\"\n- \"Not interested\" (after the pitch): clarify once, then step down: \"Totally fair. Would it help if I emailed over our wholesale rate sheet so you have it on file?\"\n- \"We already have a provider\": treat it as discovery: \"I figured you did. Who have you got running your terminals right now?\" Then offer a no-cost comparison against their last statement.\n- \"Just send me information\": treat it as a win. \"Happy to do that right after we hang up.\" Then let the call move on.\n- \"Can I keep my current machine?\": be direct. \"We always provide and set up brand-new integrated Clover or NRS hardware, because our wholesale processing runs through those direct networks. Our team transfers your whole menu and inventory for free.\"\n- \"I'm locked into a contract\" or \"I don't want another lease\": validate and defer specifics. \"Makes sense. There's zero upfront cost on our end, and our Consultant can look at your setup and tell you plainly whether a move makes sense.\"\n- \"How much does it cost?\": ask \"Are you asking about the monthly processing rates, or the equipment itself?\" Then give the exact numbers from your pricing reference and go to Beat 5.\n- \"Who are you?\" or \"Is this a scam?\": \"Good question. We're Clover Posivex, a direct Clover and NRS partner based in Atlanta, and you can check us out at posivex dot com.\" Then continue with the beat you were on.\n- \"Are you a robot?\": answer honestly and continue.\n- Wants the Consultant right now: \"Our Consultant isn't on this line, but they'll call you and walk you through a quick live demo whenever suits you. What day and time works best?\" Never promise a live transfer.\n- Use the persona-specific playbooks in your main instructions for anything else.\n\n# Claims and facts\n\n- Beyond the one phrase in Beat 2, don't claim \"cheapest\", \"lowest\" or \"best\" rates. Never guarantee or estimate savings. You may say it can reduce costs and potentially leave more profit in the business.\n- The free part is device setup and onboarding, with the inventory and system set up by our backend team. Never call it a free trial, never say \"no obligation\", and never promise they can return, cancel or keep the device.\n- When you quote lease prices, always say it is a forty-eight-month lease-to-own with nothing upfront. If they ask what the lease totals, do the plain multiplication (monthly price times forty-eight) and mention that an outright buyout exists.\n- Never make claims about what other businesses do or prefer.\n- Don't bring up passing fees to customers or the surcharge program unless the merchant raises it.\n- If they ask what happens after the demo or whether they have to buy, say our Consultant will walk them through it and you don't want to give wrong information.\n- Don't make up facts. If it is not in your main instructions or your knowledge base, say: \"I don't want to give you wrong information on that. Our Consultant can confirm those exact details for you.\"\n\n# Voice\n\nContractions. Rotate brief acknowledgments and don't repeat one twice in a row. No brackets, stage directions or lists. Output only the words you will say out loud.",
+        "additional_knowledge_base": [],
+        "additional_tool_ids": [],
+        "label": "Node 3: Conversation",
+        "entry_behavior": "generate_immediately",
+        "forced_tool_name": null
+      },
+      "node_01m61s59f6ej2s5yaeykjm6arp": {
+        "type": "override_agent",
+        "position": {
+          "x": 849.9999999999999,
+          "y": 837.9999999999999
+        },
+        "edge_order": [
+          "edge_01m61sgv7je8jvadvz9pa0yy1p",
+          "edge_01m61s59f7eyrtygzbtzbb279s",
+          "edge_01m61seq6fer8rdrw5av4h88sv"
+        ],
+        "parent_subgraph_id": null,
+        "conversation_config": {
+          "turn": {
+            "turn_eagerness": "patient",
+            "spelling_patience": null,
+            "speculative_turn": null,
+            "retranscribe_on_turn_timeout": null
+          },
+          "tts": {
+            "voice_id": null
+          },
+          "conversation": {
+            "client_events": null
+          },
+          "agent": {
+            "prompt": {
+              "prompt": null,
+              "llm": "gemini-3.5-flash",
+              "built_in_tools": {},
+              "knowledge_base": []
+            }
+          }
+        },
+        "additional_prompt": "# This step\n\nThe prospect has agreed to a next step. Collect only the details that step needs, one thing at a time, and keep friction low. Work out which step they agreed to from the conversation. If you are not sure which step they agreed to, assume they are ready for the demo and make the ask: \"The best part is we set the device up for free, with all your inventory loaded and handled by our own backend team, so you can see how it works in your store firsthand. Can we hop on a quick ten-minute Zoom or Google Meet so we can show you a live demo and see how it could help your business?\" Don't offer a choice between the demo and an email unless they decline the demo.\n\n# Live demo call (ten minutes, Zoom or Google Meet)\n\n- Confirm their name.\n- Get their email for the meeting invite and link. Confirm it as described below.\n- Ask which they prefer, Zoom or Google Meet.\n- Confirm the number instead of asking from scratch, in case we need to reach them: \"Is this the best number for our Consultant to reach you, or is there a better cell?\"\n- Our Consultant will call and meet with them whenever they prefer, so ask what day and time suits them best. Offer two examples only if they hesitate: \"Would tomorrow morning around ten work, or is mid-afternoon better?\"\n- Use the time zone in {{current_datetime}} (it is the business's own local time) and confirm it if there is any doubt.\n- Agree a specific day and time. Tell them the invite will come by email.\n- If they don't want video, offer a phone call with our Consultant at the same time instead.\n\n# Emailed comparison or information email\n\n- Ask for their best email address.\n- Confirm it naturally. Repeat common words normally and only spell out unusual names or letters: \"Got it, so that's mike, M-I-K-E, at gmail dot com, right?\" If it's wrong, ask them to say it again and repeat the confirmation.\n- Tell them a team member will send it right after the call. For a rate comparison, mention that having a recent statement handy helps the team put exact numbers together. Never promise how the statement is uploaded or submitted.\n\n# Callback\n\n- Lock in a specific day and time window, and confirm you should call this same number.\n\n# Rules\n\n- If the prospect did not actually agree to anything (they declined, said no, or said they are not interested), don't collect any details and don't ask for anything. Acknowledge warmly in one short sentence, with no pitch, and let the call move on to the close.\n- Don't say goodbye or any closing line (\"have a great day\", \"thanks for your time\"). The closing step does that.\n- Only when everything the step needs is confirmed, say \"Perfect, you're all set.\" followed by one short sentence of what is set (for example the day, time and where the invite goes). Confirmed means: for an email, you read it back and they said it is right; for a demo, you have their name, email, Zoom or Google Meet choice, number, and a day and time; for a callback, a day and time. Never say \"you're all set\" before then.\n- If they ask what happens after the demo, whether they have to buy, or about any obligation, cancellation or return, don't answer and never say \"no obligation\". Say: \"Our Consultant will walk you through all of that. I don't want to give you wrong information.\" Then continue with the step.\n- When you read an email back, copy it exactly as they gave it, character for character, and spell out any unusual part.\n- One question at a time. One to two short sentences. Wait for each answer.\n- Don't ask for anything the step doesn't need.\n- If they hesitate, ask a question, raise a concern, or change their mind, answer it and let the call go back to the conversation.\n- If they won't give their email, don't ask again. Offer a lighter step (a callback, or posivex dot com), and if they decline that too, let the call move on.\n- Never ask for an SSN, bank routing number, driver's license or voided check. Our Consultant handles applications through a secure digital portal.\n- Use the skip_turn tool if they say \"hold on\" or \"one second\".",
+        "additional_knowledge_base": [],
+        "additional_tool_ids": [],
+        "label": "Node 4: Lock In Next Step",
+        "entry_behavior": "generate_immediately",
+        "forced_tool_name": null
+      },
+      "node_01m61seq6ceynsfe4m4ywevejx": {
+        "type": "say",
+        "position": {
+          "x": 321,
+          "y": 736
+        },
+        "edge_order": [
+          "edge_close_to_end"
+        ],
+        "parent_subgraph_id": null,
+        "conversation_config": {
+          "turn": {
+            "turn_eagerness": null,
+            "spelling_patience": null,
+            "speculative_turn": null,
+            "retranscribe_on_turn_timeout": null
+          },
+          "tts": {
+            "voice_id": null
+          },
+          "agent": {
+            "prompt": {
+              "prompt": null,
+              "llm": null,
+              "built_in_tools": {}
+            }
+          }
+        },
+        "additional_prompt": "",
+        "additional_knowledge_base": [],
+        "additional_tool_ids": [],
+        "label": "Close",
+        "message": {
+          "type": "prompt",
+          "prompt": "Give one short, warm closing line and nothing else. Recap only what was actually confirmed in this call, if anything: a ten-minute live demo (Zoom or Google Meet) at a specific day and time that was agreed, with the invite coming by email, an email a team member will send right after the call, or a callback at a specific time. Never say or imply a demo or callback is booked if no day and time were agreed. If nothing was confirmed, thank them and leave the door open. Do not pitch. Do not ask a new question."
+        },
+        "wait_for_speech_completion": true,
+        "wait_for_user_response": false
+      },
+      "node_01m61sgv7gewebzkqa6v7fnaah": {
+        "type": "say",
+        "position": {
+          "x": 1456,
+          "y": 736
+        },
+        "edge_order": [
+          "edge_dnc_to_end"
+        ],
+        "parent_subgraph_id": null,
+        "conversation_config": {
+          "turn": {
+            "turn_eagerness": null,
+            "spelling_patience": null,
+            "speculative_turn": null,
+            "retranscribe_on_turn_timeout": null
+          },
+          "tts": {
+            "voice_id": null
+          },
+          "agent": {
+            "prompt": {
+              "prompt": null,
+              "llm": null,
+              "built_in_tools": {}
+            }
+          }
+        },
+        "additional_prompt": "",
+        "additional_knowledge_base": [],
+        "additional_tool_ids": [],
+        "label": "Do-Not-Call",
+        "message": {
+          "type": "literal",
+          "text": "Understood, my apologies. I'll make sure we don't call this number again. Take care.",
+          "text_translations": {}
+        },
+        "wait_for_speech_completion": false,
+        "wait_for_user_response": false
+      },
+      "node_01m61smjmaeybss5zr5xrayxhj": {
+        "type": "end",
+        "position": {
+          "x": 1270.5,
+          "y": -275.9999999999999
+        },
+        "edge_order": [],
+        "parent_subgraph_id": null,
+        "return_when_nested": true,
+        "outcome": "success",
+        "exit_slot": null
+      }
+    },
+    "subgraphs": {},
+    "prevent_subagent_loops": true
+  },
+  "access_info": {
+    "is_creator": true,
+    "creator_name": "Developer 3knot",
+    "creator_email": "developer.3knots@gmail.com",
+    "role": "admin",
+    "anonymous_access_level_override": null,
+    "access_source": "creator"
+  },
+  "access_permissions": [
+    "agent_archive",
+    "agent_duplicate",
+    "agent_edit_advanced_settings",
+    "agent_edit_config",
+    "agent_edit_conversation_metadata",
+    "agent_edit_guardrails",
+    "agent_edit_llm",
+    "agent_edit_memories",
+    "agent_edit_metadata",
+    "agent_edit_procedures",
+    "agent_edit_prompt",
+    "agent_edit_task_config",
+    "agent_edit_voice",
+    "agent_edit_widget",
+    "agent_edit_workflow",
+    "agent_manage_analysis",
+    "agent_manage_attached_knowledge_base",
+    "agent_manage_attached_mcp_servers",
+    "agent_manage_attached_pronunciation_dictionaries",
+    "agent_manage_attached_tests",
+    "agent_manage_attached_tools",
+    "agent_manage_batch_calling",
+    "agent_manage_branches",
+    "agent_manage_channels",
+    "agent_manage_experiments",
+    "agent_manage_phone_numbers",
+    "agent_manage_protected_branches",
+    "agent_manage_traffic",
+    "agent_manage_whatsapp",
+    "agent_merge_branches",
+    "agent_monitor_conversation",
+    "agent_publish_version",
+    "agent_rerun_conversation_analysis",
+    "agent_run_tasks",
+    "agent_run_tests",
+    "agent_search_conversation_history",
+    "agent_view_advanced_settings",
+    "agent_view_analysis",
+    "agent_view_analytics",
+    "agent_view_batch_calling",
+    "agent_view_channels",
+    "agent_view_config",
+    "agent_view_conversation_by_id",
+    "agent_view_costs",
+    "agent_view_experiments",
+    "agent_view_guardrails",
+    "agent_view_knowledge_base",
+    "agent_view_llm",
+    "agent_view_mcp_servers",
+    "agent_view_memories",
+    "agent_view_metadata",
+    "agent_view_phone_numbers",
+    "agent_view_procedures",
+    "agent_view_prompt",
+    "agent_view_pronunciation_dictionaries",
+    "agent_view_tasks",
+    "agent_view_tests",
+    "agent_view_tools",
+    "agent_view_version_history",
+    "agent_view_voice",
+    "agent_view_whatsapp",
+    "agent_view_widget",
+    "agent_view_workflow",
+    "resource_delete",
+    "resource_manage_access"
+  ],
+  "tags": [],
+  "version_id": "agtvrsn_6401m63qx855epxaze75shmyaca5",
+  "branch_id": "agtbrch_3101m61r9mbfekk92hfwrrxwzasf",
+  "main_branch_id": "agtbrch_3101m61r9mbfekk92hfwrrxwzasf",
+  "procedures": {},
+  "trust_context": "unknown",
+  "default_hold_audio_url": "https://eleven-public-cdn-common.elevenlabs.io/convai/ambient-audio-assets/elevator1.mp3"
+}

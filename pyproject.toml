@@ -1,0 +1,61 @@
+[project]
+name = "posivex-voice-agent"
+version = "0.1.0"
+description = "Production LiveKit Voice Agent for Clover/NRS Outbound B2B Sales"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "livekit-agents==1.8.10",
+    "livekit-plugins-elevenlabs==1.8.10",
+    "livekit-plugins-google==1.8.10",
+    "livekit-plugins-deepgram==1.8.10",
+    "livekit-plugins-silero==1.8.10",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.1",
+    "pyyaml>=6.0.2",
+    "jinja2>=3.1.5",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "pyright>=1.1.390",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pre-commit>=4.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    "reference",
+    "spikes",
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "live: marks tests calling live external provider APIs (deselected by default)",
+]
+addopts = "-m 'not live'"
