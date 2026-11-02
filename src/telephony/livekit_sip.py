@@ -16,9 +16,13 @@ logger = logging.getLogger("posivex.telephony.livekit")
 class LiveKitSIPProvider(TelephonyProvider):
     """Telephony provider that dials via LiveKit SIP participant API."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        api_client: api.LiveKitAPI | None = None,
+    ) -> None:
         self._settings = settings
-        self._lkapi: api.LiveKitAPI | None = None
+        self._lkapi: api.LiveKitAPI | None = api_client
 
     def _get_api(self) -> api.LiveKitAPI:
         if self._lkapi is None:
@@ -47,12 +51,19 @@ class LiveKitSIPProvider(TelephonyProvider):
             )
         )
 
+        callee_name = (
+            request.dynamic_variables.contact_name
+            or request.dynamic_variables.business_name
+            or "Callee"
+        )
         logger.info(
-            "Creating SIP participant to dial %s in room %s via trunk %s",
+            "Creating SIP participant to dial %s in room %s via trunk %s (%s)",
             request.phone,
             room_name,
             trunk_id,
+            callee_name,
         )
+
         # 2. Dial SIP participant
         sip_part = await lkapi.sip.create_sip_participant(
             api.CreateSIPParticipantRequest(
@@ -60,6 +71,16 @@ class LiveKitSIPProvider(TelephonyProvider):
                 sip_trunk_id=trunk_id,
                 sip_call_to=request.phone,
                 participant_identity=f"phone_{request.phone}",
+                participant_name=callee_name,
+                participant_metadata=request.model_dump_json(),
+                participant_attributes={
+                    "call_id": call_id,
+                    "persona": request.persona,
+                    "language": request.language,
+                    "phone": request.phone,
+                },
+                play_ringtone=True,
+                max_call_duration={"seconds": self._settings.conversation.max_duration_seconds},
             )
         )
 
@@ -82,4 +103,3 @@ class LiveKitSIPProvider(TelephonyProvider):
         if self._lkapi is not None:
             await self._lkapi.aclose()
             self._lkapi = None
-

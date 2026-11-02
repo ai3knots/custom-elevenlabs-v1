@@ -136,7 +136,7 @@ class WebhookConfig(BaseModel):
 class TelephonyConfig(BaseModel):
     """Telephony provider configuration."""
 
-    provider: Literal["livekit_sip", "mock"] = "mock"
+    provider: Literal["livekit_sip", "mock", "console"] = "mock"
     sip_trunk_id: str | None = None
     max_concurrent_calls: int = 50
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.config import Settings
 from src.telephony.base import DispatchResult, TelephonyProvider
+from src.telephony.console import ConsoleTelephonyProvider
 from src.telephony.livekit_sip import LiveKitSIPProvider
 from src.telephony.mock import MockTelephonyProvider
 
@@ -12,14 +13,16 @@ def get_telephony_provider(settings: Settings) -> TelephonyProvider:
     """Create a telephony provider based on configuration settings."""
     if settings.telephony.provider == "livekit_sip":
         return LiveKitSIPProvider(settings)
+    if settings.telephony.provider == "console":
+        return ConsoleTelephonyProvider()
     return MockTelephonyProvider()
 
 
 __all__ = [
+    "ConsoleTelephonyProvider",
     "DispatchResult",
     "LiveKitSIPProvider",
     "MockTelephonyProvider",
     "TelephonyProvider",
     "get_telephony_provider",
 ]
-
