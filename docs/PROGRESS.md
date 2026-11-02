@@ -1,7 +1,7 @@
 # Migration Progress & Execution Status (`docs/PROGRESS.md`)
 
-> **Last Updated:** 2026-10-30  
-> **Status:** Planning & Verification Complete — Awaiting Approval ("continue") to Begin Phase 1
+> **Last Updated:** 2026-11-02  
+> **Status:** Phase 1 (Build-First) Complete — All 11 Milestones (B0–B10) Verified & Passing
 
 ---
 
@@ -46,5 +46,5 @@
 | **B7** | **FastAPI API Service** | `/api/v1/calls` native API + `/v1/convai/*` ElevenLabs emulation layer; request validation schemas matching Posivex-lead-gen; telephony abstraction (`src/telephony/`); health probes. | **Completed** |
 | **B8** | **Transactional Webhook Outbox** | Database outbox queue; worker with exponential backoff retries; HMAC-SHA256 signature generator matching ElevenLabs contract. | **Completed** |
 | **B9** | **Telephony Abstraction** | `TelephonyProvider` interface; `LiveKitSIPProvider` implementation with agent dispatch and participant management; `MockTelephonyProvider` and `ConsoleTelephonyProvider`. | **Completed** |
-| **B10** | **Hardening & Verification** | Prometheus metrics; health check endpoints; smoke test script; deployment runbook. | Queued |
+| **B10** | **Hardening & Verification** | Prometheus metrics exposition (`/metrics`); unified CLI (`src/main.py`); end-to-end dry-run smoke script (`scripts/smoke_test.py`); operational runbook (`docs/RUNBOOK.md`). | **Completed** |
 

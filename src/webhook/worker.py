@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config import Settings
 from src.db.models import WebhookOutbox, WebhookStatus
+from src.metrics.prometheus import POSIVEX_WEBHOOK_DELIVERIES_TOTAL
 from src.webhook.signer import sign_payload
 
 logger = logging.getLogger("posivex.webhook.worker")
@@ -103,12 +104,14 @@ class WebhookOutboxWorker:
                 updated_entry.delivered_at = now
                 updated_entry.signature_header = sig_header
                 updated_entry.last_error = None
+                POSIVEX_WEBHOOK_DELIVERIES_TOTAL.labels(status="delivered").inc()
                 logger.info("Successfully delivered webhook outbox id=%s", entry_id)
             else:
                 updated_entry.attempts += 1
                 updated_entry.last_error = error_msg
                 if updated_entry.attempts >= updated_entry.max_attempts:
                     updated_entry.status = WebhookStatus.DEAD_LETTER.value
+                    POSIVEX_WEBHOOK_DELIVERIES_TOTAL.labels(status="dead_letter").inc()
                     logger.warning(
                         "Webhook outbox id=%s reached max attempts (%d); marked DEAD_LETTER: %s",
                         entry_id,
@@ -117,6 +120,7 @@ class WebhookOutboxWorker:
                     )
                 else:
                     updated_entry.status = WebhookStatus.PENDING.value
+                    POSIVEX_WEBHOOK_DELIVERIES_TOTAL.labels(status="retry").inc()
                     delay = calculate_backoff_seconds(
                         updated_entry.attempts,
                         base=self.settings.webhook.retry_backoff_base,

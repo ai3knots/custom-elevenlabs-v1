@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from src.api.deps import get_call_recorder, get_settings, get_telephony
 from src.config import CallRequest, Settings
 from src.db.models import CallStatus
+from src.metrics.prometheus import POSIVEX_CALLS_TOTAL
 from src.persistence.recorder import CallRecorder
 from src.telephony import TelephonyProvider
 
@@ -87,6 +88,9 @@ async def initiate_call(
 
     # 5. Update call status and log dispatch event
     await recorder.update_call_status(call_id=call_id, status=CallStatus.IN_PROGRESS.value)
+    POSIVEX_CALLS_TOTAL.labels(
+        persona=request.persona, language=request.language, status=CallStatus.IN_PROGRESS.value
+    ).inc()
     await recorder.record_event(
         call_id=call_id,
         event_type="call_dispatched",

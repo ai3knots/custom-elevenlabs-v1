@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.api.routes import calls_router, convai_router, health_router
 from src.config import Settings, load_settings
 from src.db.base import get_engine, get_sessionmaker
+from src.metrics.prometheus import get_latest_metrics
 from src.telephony import TelephonyProvider, get_telephony_provider
 
 
@@ -75,6 +76,12 @@ def create_app(
     app.include_router(health_router)
     app.include_router(calls_router)
     app.include_router(convai_router)
+
+    @app.get("/metrics", tags=["Metrics"])
+    async def metrics_endpoint() -> Response:
+        """Expose Prometheus exposition format metrics for scraping."""
+        content, content_type = get_latest_metrics()
+        return Response(content=content, media_type=content_type)
 
     return app
 

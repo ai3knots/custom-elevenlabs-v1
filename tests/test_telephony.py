@@ -168,3 +168,4 @@ def test_telephony_factory() -> None:
     settings_livekit = Settings(telephony={"provider": "livekit_sip"})  # type: ignore[arg-type]
     provider_livekit = get_telephony_provider(settings_livekit)
     assert isinstance(provider_livekit, LiveKitSIPProvider)
+

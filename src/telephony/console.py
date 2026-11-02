@@ -47,3 +47,4 @@ class ConsoleTelephonyProvider(TelephonyProvider):
 
     async def close(self) -> None:
         logger.info("[CONSOLE TELEPHONY] Provider closed.")
+
