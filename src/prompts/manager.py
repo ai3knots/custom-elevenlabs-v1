@@ -84,3 +84,4 @@ class PromptManager:
                 sections.append(f"# Knowledge Base\n\n{kb_text}")
 
         return "\n\n".join(sections)
+

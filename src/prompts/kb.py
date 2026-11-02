@@ -78,3 +78,4 @@ class KnowledgeBaseProvider:
         if self._cached_token_count is None:
             self.load_kb()
         return self._cached_token_count or 0
+

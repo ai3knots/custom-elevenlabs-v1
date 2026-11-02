@@ -23,3 +23,4 @@ The prospect has agreed to a next step. Collect only the details that step needs
 - **Backward Loop Rule:** If the prospect hesitates, raises an objection, asks product or pricing questions, or has doubts during details collection, answer the question and immediately call `transition("conversation", reason=...)` to return to discovery.
 - If the prospect changes their mind or refuses to provide details, call `transition("close", reason=...)`.
 - If the prospect says "do not call", "take me off your list", call `transition("dnc_close", reason=...)`.
+
