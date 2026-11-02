@@ -36,3 +36,4 @@ async def readiness_probe(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "unhealthy", "database": "disconnected", "error": str(e)},
         ) from e
+

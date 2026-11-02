@@ -37,3 +37,4 @@ class MockTelephonyProvider(TelephonyProvider):
 
     async def close(self) -> None:
         pass
+

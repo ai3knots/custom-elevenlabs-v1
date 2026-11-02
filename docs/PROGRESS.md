@@ -44,7 +44,7 @@
 | **B5** | **LiveKit Voice Agent Worker** | `PersonaAgent` subclass driven by FSM; dynamic instruction and tool swapping (`Agent.update_instructions`, `Agent.update_tools`); Deepgram Nova-3 STT; ElevenLabs v3 conversational TTS; Gemini LLM + FallbackAdapter; layered AMD. | **Completed** |
 | **B6** | **Persistence & Cost Tracking** | Event recording; transcript persistence; per-call token, character, and provider cost tracking to Postgres; `CallRecorder` service and `CostAccumulator`. | **Completed** |
 | **B7** | **FastAPI API Service** | `/api/v1/calls` native API + `/v1/convai/*` ElevenLabs emulation layer; request validation schemas matching Posivex-lead-gen; telephony abstraction (`src/telephony/`); health probes. | **Completed** |
-| **B8** | **Transactional Webhook Outbox** | Database outbox queue; worker with exponential backoff retries; HMAC-SHA256 signature generator matching ElevenLabs contract. | Queued |
+| **B8** | **Transactional Webhook Outbox** | Database outbox queue; worker with exponential backoff retries; HMAC-SHA256 signature generator matching ElevenLabs contract. | **Completed** |
 | **B9** | **Telephony Abstraction** | `TelephonyProvider` interface; `LiveKitSIPProvider` implementation; Mock/Console provider for offline verification. | Queued |
 | **B10** | **Hardening & Verification** | Prometheus metrics; health check endpoints; smoke test script; deployment runbook. | Queued |
 

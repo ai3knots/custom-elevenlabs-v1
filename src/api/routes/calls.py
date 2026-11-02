@@ -133,3 +133,4 @@ async def get_call_details(
         "started_at": call.started_at.isoformat() if call.started_at else None,
         "ended_at": call.ended_at.isoformat() if call.ended_at else None,
     }
+

@@ -82,3 +82,4 @@ class LiveKitSIPProvider(TelephonyProvider):
         if self._lkapi is not None:
             await self._lkapi.aclose()
             self._lkapi = None
+
