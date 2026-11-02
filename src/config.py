@@ -138,6 +138,7 @@ class TelephonyConfig(BaseModel):
 
     provider: Literal["livekit_sip", "mock", "console"] = "mock"
     sip_trunk_id: str | None = None
+    sip_phone_number_id: str | None = None
     max_concurrent_calls: int = 50
 
 
@@ -302,6 +303,17 @@ def load_settings(
     webhook_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
     if webhook_secret:
         merged.setdefault("webhook", {})["webhook_secret"] = webhook_secret
+
+    # Telephony configuration from env
+    telephony_provider = os.getenv("TELEPHONY_PROVIDER")
+    if telephony_provider:
+        merged.setdefault("telephony", {})["provider"] = telephony_provider
+    sip_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
+    if sip_trunk_id:
+        merged.setdefault("telephony", {})["sip_trunk_id"] = sip_trunk_id
+    sip_phone_id = os.getenv("SIP_PHONE_NUMBER_ID")
+    if sip_phone_id:
+        merged.setdefault("telephony", {})["sip_phone_number_id"] = sip_phone_id
 
     # 4. Dispatch Overrides
     if overrides:
