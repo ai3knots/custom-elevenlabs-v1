@@ -57,5 +57,5 @@ COPY --from=builder --chown=appuser:appuser /app /app
 USER appuser
 
 ENTRYPOINT ["python", "-m", "src.main"]
-CMD ["start"]
+CMD ["agent", "start", "--persona", "amelia"]
 
