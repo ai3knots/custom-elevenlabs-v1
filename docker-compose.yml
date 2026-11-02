@@ -82,6 +82,23 @@ services:
       livekit-server:
         condition: service_started
 
+  sip:
+    image: livekit/sip:latest
+    container_name: posivex_sip
+    restart: unless-stopped
+    command: ["livekit-sip", "--config", "/etc/livekit/sip.yaml"]
+    volumes:
+      - ./sip.yaml:/etc/livekit/sip.yaml:ro
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-10100:10000-10100/udp"
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit-server:
+        condition: service_started
+
 volumes:
   postgres_data:
   redis_data:

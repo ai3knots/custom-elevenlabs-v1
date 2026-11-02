@@ -1,0 +1,16 @@
+# LiveKit SIP Gateway Configuration
+# Handles SIP signaling with Telnyx and bridges RTP audio into LiveKit WebRTC rooms
+
+api_key: posivex_livekit_key_prod
+api_secret: posivex_livekit_secret_prod_replace_with_random_string
+ws_url: ws://livekit-server:7880
+
+redis:
+  address: redis:6379
+
+sip_port: 5060
+rtp_port: "10000-10100"
+use_external_ip: true
+
+logging:
+  level: info
