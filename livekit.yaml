@@ -10,5 +10,5 @@ redis:
   address: redis:6379
 
 keys:
-  # The server will read keys from LIVEKIT_KEYS environment variable or fallback to this default
+  posivex_livekit_key_prod: posivex_livekit_secret_prod_replace_with_random_string
   posivex_key: posivex_secret_change_me_in_production
