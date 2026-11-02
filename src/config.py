@@ -138,6 +138,7 @@ class TelephonyConfig(BaseModel):
 
     provider: Literal["livekit_sip", "mock"] = "mock"
     sip_trunk_id: str | None = None
+    max_concurrent_calls: int = 50
 
 
 class Settings(BaseSettings):

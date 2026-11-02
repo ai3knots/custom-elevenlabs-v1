@@ -19,6 +19,9 @@ dependencies = [
     "asyncpg>=0.32.0",
     "alembic>=1.20.1",
     "greenlet>=3.5.6",
+    "fastapi>=0.162.0",
+    "uvicorn[standard]>=0.54.0",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
@@ -49,7 +52,7 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = ["E501", "B008"]
 
 [tool.pyright]
 include = ["src", "tests"]

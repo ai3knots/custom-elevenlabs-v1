@@ -208,3 +208,53 @@ class CallRecorder:
             await session.commit()
             logger.info("Finalized call id=%s: outcome=%s, cost=%.4f", call_id, call_outcome, total_cost)
             return call, outbox_entry
+
+    async def get_call(self, call_id: str) -> Call | None:
+        """Fetch a call record by primary ID."""
+        async with self.session_factory() as session:
+            stmt = select(Call).where(Call.id == call_id)
+            res = await session.execute(stmt)
+            return res.scalar_one_or_none()
+
+    async def get_active_calls_count(self) -> int:
+        """Count currently active calls (queued or in progress)."""
+        async with self.session_factory() as session:
+            stmt = select(Call).where(
+                Call.status.in_([CallStatus.QUEUED.value, CallStatus.IN_PROGRESS.value])
+            )
+            res = await session.execute(stmt)
+            return len(res.scalars().all())
+
+    async def update_call_status(
+        self,
+        call_id: str,
+        status: str,
+        termination_reason: str | None = None,
+    ) -> Call | None:
+        """Update call lifecycle status and optional termination reason."""
+        async with self.session_factory() as session:
+            stmt = select(Call).where(Call.id == call_id)
+            res = await session.execute(stmt)
+            call = res.scalar_one_or_none()
+            if not call:
+                return None
+            call.status = status
+            if termination_reason:
+                call.termination_reason = termination_reason
+            call.updated_at = datetime.now(UTC)
+            await session.commit()
+            return call
+
+    async def get_recent_call_by_phone(self, phone: str) -> Call | None:
+        """Fetch the most recent call record for a given phone number."""
+        async with self.session_factory() as session:
+            stmt = (
+                select(Call)
+                .where(Call.phone == phone)
+                .order_by(Call.created_at.desc())
+                .limit(1)
+            )
+            res = await session.execute(stmt)
+            return res.scalar_one_or_none()
+
+

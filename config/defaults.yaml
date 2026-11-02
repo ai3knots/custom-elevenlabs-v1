@@ -91,4 +91,5 @@ webhook:
 telephony:
   provider: "mock"
   sip_trunk_id: null
+  max_concurrent_calls: 50
 
