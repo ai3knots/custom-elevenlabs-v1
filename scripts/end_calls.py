@@ -25,7 +25,11 @@ async def end_all_calls() -> None:
         print(f"Found {len(response.rooms)} active room(s). Terminating...")
         for room in response.rooms:
             print(f"Ending call in room: {room.name} ({room.num_participants} participants)")
-            await lkapi.room.delete_room(api.DeleteRoomRequest(room=room.name))
+            try:
+                await lkapi.room.delete_room(api.DeleteRoomRequest(room=room.name))
+                print(f"  ✓ Terminated room {room.name}")
+            except Exception as e:
+                print(f"  ℹ Room {room.name} was already closed or inactive: {e}")
 
         print("All active calls and rooms have been terminated.")
     finally:
@@ -33,3 +37,4 @@ async def end_all_calls() -> None:
 
 if __name__ == "__main__":
     asyncio.run(end_all_calls())
+
