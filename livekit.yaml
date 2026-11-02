@@ -10,5 +10,4 @@ redis:
   address: redis:6379
 
 keys:
-  posivex_livekit_key_prod: posivex_livekit_secret_prod_replace_with_random_string
-  posivex_key: posivex_secret_change_me_in_production
+  posivex-livekit-key-prod: 14867015a21442308f2c7ee357e1b2c6e3393fec6a8627be
