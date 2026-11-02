@@ -61,12 +61,17 @@ def test_llm_swappable_mock_vs_real():
     mock_instance = get_llm("mock-model", mock_cfg)
     assert isinstance(mock_instance, MockLLM)
 
-    # Real Google Gemini LLM
+    # Real Google Gemini LLM (3.5 supports thinking_level)
     google_cfg = LLMConfig(provider="google", temperature=0.0, thinking_level="minimal")
     google_instance = get_llm("gemini-3.5-flash-lite", google_cfg, api_key="test_gemini_key")
     assert isinstance(google_instance, google.LLM)
     assert google_instance._opts.model == "gemini-3.5-flash-lite"
     assert google_instance._opts.temperature == 0.0
+
+    # Real Google Gemini LLM (2.5 uses thinking_budget to prevent ValueError)
+    google_25_instance = get_llm("gemini-2.5-flash", google_cfg, api_key="test_gemini_key")
+    assert isinstance(google_25_instance, google.LLM)
+    assert google_25_instance._opts.model == "gemini-2.5-flash"
 
 
 def test_tts_swappable_mock_vs_real():
@@ -105,13 +110,18 @@ def test_fallback_adapter_wiring():
     """Verify FallbackAdapter chains primary and secondary LLMs with configured timeout."""
     primary = MockLLM(default_response="primary")
     secondary = MockLLM(default_response="secondary")
-    cfg = LLMConfig(cascade_timeout=4.0, max_retries=0)
+    cfg = LLMConfig(cascade_timeout=12.0, max_retries=0)
 
     adapter = create_fallback_llm(primary, secondary, cfg)
     assert isinstance(adapter, FallbackAdapter)
     assert len(adapter._llm_instances) == 2
-    assert adapter._attempt_timeout == 4.0
+    assert adapter._attempt_timeout == 12.0
     assert adapter._max_retry_per_llm == 0
+
+    # Minimum timeout clamped to 10.0s for Gemini API compliance
+    clamped_cfg = LLMConfig(cascade_timeout=4.0)
+    clamped_adapter = create_fallback_llm(primary, secondary, clamped_cfg)
+    assert clamped_adapter._attempt_timeout == 10.0
 
 
 def test_missing_api_keys_raise_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -23,10 +23,10 @@ llm:
   provider: "google"
   default_model: "gemini-3.5-flash-lite"
   conversation_model: "gemini-3.5-flash"
-  fallback_model: "gemini-2.5-flash"
+  fallback_model: "gemini-3.5-flash"
   temperature: 0.0
   thinking_level: "minimal"
-  cascade_timeout: 4.0
+  cascade_timeout: 10.0
   max_retries: 0
 
 tts:

@@ -46,10 +46,10 @@ class LLMConfig(BaseModel):
     provider: Literal["google", "mock"] = "google"
     default_model: str = "gemini-3.5-flash-lite"
     conversation_model: str = "gemini-3.5-flash"
-    fallback_model: str = "gemini-2.5-flash"
+    fallback_model: str = "gemini-3.5-flash"
     temperature: float = 0.0
     thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
-    cascade_timeout: float = 4.0
+    cascade_timeout: float = 10.0
     max_retries: int = 0
 
 
