@@ -4,7 +4,7 @@ api_secret: 14867015a21442308f2c7ee357e1b2c6e3393fec6a8627be
 ws_url: ws://127.0.0.1:7880
 
 redis:
-  address: 127.0.0.1:6379
+  address: 127.0.0.1:6380
 
 sip_port: 5060
 rtp_port: "10000-10100"
