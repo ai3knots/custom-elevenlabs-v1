@@ -1,10 +1,10 @@
 # LiveKit SIP Gateway Configuration
 api_key: posivex-livekit-key-prod
 api_secret: 14867015a21442308f2c7ee357e1b2c6e3393fec6a8627be
-ws_url: ws://livekit-server:7880
+ws_url: ws://127.0.0.1:7880
 
 redis:
-  address: redis:6379
+  address: 127.0.0.1:6379
 
 sip_port: 5060
 rtp_port: "10000-10100"
