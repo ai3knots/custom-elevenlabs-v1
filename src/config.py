@@ -295,6 +295,14 @@ def load_settings(
         if val is not None:
             merged[field_name] = val
 
+    # Webhook integrations from env
+    lead_gen_url = os.getenv("LEAD_GEN_WEBHOOK_URL")
+    if lead_gen_url:
+        merged.setdefault("webhook", {})["lead_gen_base_url"] = lead_gen_url
+    webhook_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
+    if webhook_secret:
+        merged.setdefault("webhook", {})["webhook_secret"] = webhook_secret
+
     # 4. Dispatch Overrides
     if overrides:
         merged = deep_merge(merged, overrides)

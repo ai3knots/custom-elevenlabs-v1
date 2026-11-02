@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any
 
 from dotenv import load_dotenv
@@ -56,7 +57,23 @@ async def run_agent_session(
     recorder: CallRecorder | None = None,
 ) -> None:
     """Core entrypoint execution flow for an individual call session."""
+    # Ensure room connection is established so room and remote participants are available
+    await ctx.connect()
+
+    # Resolve metadata from Room, Job, or remote participant
     raw_metadata = ctx.room.metadata
+    if not raw_metadata and hasattr(ctx, "job") and ctx.job:
+        if getattr(ctx.job, "metadata", None):
+            raw_metadata = ctx.job.metadata
+        elif getattr(ctx.job, "room", None) and getattr(ctx.job.room, "metadata", None):
+            raw_metadata = ctx.job.room.metadata
+
+    if not raw_metadata:
+        for p in ctx.room.remote_participants.values():
+            if p.metadata:
+                raw_metadata = p.metadata
+                break
+
     call_request = parse_call_request_from_room(raw_metadata)
 
     call_id = call_request.call_id or f"call_{ctx.room.name}"
@@ -131,6 +148,23 @@ async def run_agent_session(
         kb_config=resolved_settings.kb,
     )
 
+    async def broadcast_telemetry(event_type: str, payload: dict[str, Any]) -> None:
+        """Broadcast real-time state and metrics to the frontend over WebRTC data channel."""
+        try:
+            if ctx.room and ctx.room.local_participant:
+                msg = json.dumps({
+                    "type": event_type,
+                    "timestamp": time.time(),
+                    **payload,
+                })
+                await ctx.room.local_participant.publish_data(
+                    msg.encode("utf-8"),
+                    reliable=True,
+                    topic="posivex_telemetry",
+                )
+        except Exception as e:
+            logger.debug("Failed to publish telemetry to room: %s", e)
+
     async def handle_agent_event(event_type: str, payload: dict[str, Any]) -> None:
         if recorder:
             await recorder.record_event(
@@ -139,6 +173,18 @@ async def run_agent_session(
                 state=payload.get("to_state"),
                 payload=payload,
             )
+        await broadcast_telemetry(event_type, {
+            "from_node": payload.get("from_state"),
+            "to_node": payload.get("to_state"),
+            "current_node": fsm.current_state.value,
+            "reason": payload.get("reason", ""),
+            "silence_count": fsm.silence_count,
+            "active_model": (
+                resolved_settings.llm.conversation_model
+                if fsm.current_state.value == "conversation"
+                else resolved_settings.llm.default_model
+            ),
+        })
 
     agent = PersonaAgent(
         fsm=fsm,
@@ -158,7 +204,64 @@ async def run_agent_session(
     )
 
     # Attach event listeners
-    session.on("user_transcription_timeout", lambda: fsm.record_silence())
+    def handle_silence_timeout(*args: Any, **kwargs: Any) -> None:
+        fsm.record_silence()
+        import asyncio
+        asyncio.create_task(
+            broadcast_telemetry("silence_timeout", {
+                "silence_count": fsm.silence_count,
+                "max_silence_count": resolved_settings.conversation.max_silence_count,
+                "message": f"User silence timeout ({fsm.silence_count}/{resolved_settings.conversation.max_silence_count})",
+            })
+        )
+
+    session.on("user_transcription_timeout", handle_silence_timeout)
+
+    def handle_agent_state_changed(*args: Any, **kwargs: Any) -> None:
+        if args and hasattr(args[0], "new_state"):
+            new_state = str(args[0].new_state)
+        elif len(args) >= 2:
+            new_state = str(args[1])
+        elif args:
+            new_state = str(args[0])
+        else:
+            new_state = "unknown"
+        import asyncio
+        asyncio.create_task(
+            broadcast_telemetry("agent_state_changed", {
+                "agent_state": new_state,
+                "current_node": fsm.current_state.value,
+                "silence_count": fsm.silence_count,
+            })
+        )
+
+    session.on("agent_state_changed", handle_agent_state_changed)
+
+    def handle_user_state_changed(*args: Any, **kwargs: Any) -> None:
+        if args and hasattr(args[0], "new_state"):
+            new_state = str(args[0].new_state)
+        elif len(args) >= 2:
+            new_state = str(args[1])
+        elif args:
+            new_state = str(args[0])
+        else:
+            new_state = "unknown"
+        import asyncio
+        asyncio.create_task(
+            broadcast_telemetry("user_state_changed", {
+                "user_state": new_state,
+                "current_node": fsm.current_state.value,
+                "silence_count": fsm.silence_count,
+            })
+        )
+
+    session.on("user_state_changed", handle_user_state_changed)
+
+    # Resolve webhook outbox destination URL
+    webhook_destination = resolved_settings.webhook.lead_gen_base_url
+    if webhook_destination:
+        if "/api/webhooks" not in webhook_destination:
+            webhook_destination = f"{webhook_destination.rstrip('/')}/api/webhooks/elevenlabs"
 
     async def on_session_shutdown() -> None:
         if recorder:
@@ -169,11 +272,22 @@ async def run_agent_session(
                 outcome_rationale=fsm.outcome_rationale or "",
                 total_cost=cost_accumulator.total_cost,
                 charging_details=cost_accumulator.get_charging_breakdown(),
+                destination_url=webhook_destination,
             )
 
     ctx.add_shutdown_callback(on_session_shutdown)
 
     await session.start(agent=agent, room=ctx.room)
+
+    # Broadcast initial session state
+    await broadcast_telemetry("session_init", {
+        "call_id": call_id,
+        "persona": call_request.persona,
+        "current_node": fsm.current_state.value,
+        "silence_count": fsm.silence_count,
+        "active_model": resolved_settings.llm.default_model,
+        "dynamic_variables": call_request.dynamic_variables.model_dump(),
+    })
 
     # Layered AMD execution if telephony identity is present
     participant_identity = os.getenv("SIP_PARTICIPANT_IDENTITY")
@@ -191,6 +305,7 @@ async def run_agent_session(
                         call_outcome="voicemail",
                         outcome_rationale="AMD detected voicemail greeting.",
                         termination_reason="voicemail_detected",
+                        destination_url=webhook_destination,
                     )
                 session.shutdown()
                 return
@@ -203,6 +318,7 @@ async def run_agent_session(
                         call_outcome="automated_menu",
                         outcome_rationale="AMD detected automated IVR menu.",
                         termination_reason="automated_menu_detected",
+                        destination_url=webhook_destination,
                     )
                 session.shutdown()
                 return
@@ -214,10 +330,20 @@ async def run_agent_session(
     await speech_handle.wait_for_playout()
 
 
+_configured_settings: Settings | None = None
+
+
+async def default_agent_entrypoint(ctx: JobContext) -> None:
+    """Top-level RTC session entrypoint picklable by multiprocessing process pools."""
+    await run_agent_session(ctx, settings=_configured_settings)
+
+
 def create_agent_server(settings: Settings | None = None) -> AgentServer:
     """Factory creating configured AgentServer with session entrypoint."""
+    global _configured_settings
     load_dotenv()
     app_settings = settings or load_settings()
+    _configured_settings = app_settings
 
     server_kwargs: dict[str, Any] = {}
     if app_settings.livekit_url:
@@ -231,10 +357,7 @@ def create_agent_server(settings: Settings | None = None) -> AgentServer:
         os.environ["LIVEKIT_API_SECRET"] = app_settings.livekit_api_secret
 
     server = AgentServer(**server_kwargs)
-
-    @server.rtc_session()
-    async def entrypoint(ctx: JobContext) -> None:
-        await run_agent_session(ctx, settings=app_settings)
+    server.rtc_session(default_agent_entrypoint)
 
     return server
 

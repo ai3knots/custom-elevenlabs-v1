@@ -15,4 +15,8 @@ htmlcov/
 tmp/
 spikes/
 reference/
+temp_agent_starter/
+testing-frontend/
+frontend/
+node_modules/
 
