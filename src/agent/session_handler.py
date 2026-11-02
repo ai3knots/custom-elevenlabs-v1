@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 from livekit.agents import (
     AMD,
@@ -17,6 +18,8 @@ from src.agent.persona_agent import PersonaAgent
 from src.config import CallRequest, Settings, load_settings
 from src.fsm.machine import ConversationFSM
 from src.logging import set_call_id
+from src.metrics.costs import CostAccumulator
+from src.persistence.recorder import CallRecorder
 from src.prompts.manager import PromptManager
 from src.providers import (
     create_fallback_llm,
@@ -45,7 +48,11 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
     return CallRequest(phone="+14045550000")
 
 
-async def run_agent_session(ctx: JobContext, settings: Settings | None = None) -> None:
+async def run_agent_session(
+    ctx: JobContext,
+    settings: Settings | None = None,
+    recorder: CallRecorder | None = None,
+) -> None:
     """Core entrypoint execution flow for an individual call session."""
     raw_metadata = ctx.room.metadata
     call_request = parse_call_request_from_room(raw_metadata)
@@ -65,6 +72,19 @@ async def run_agent_session(ctx: JobContext, settings: Settings | None = None) -
         persona=call_request.persona,
         overrides=call_request.config_overrides,
     )
+
+    # Initialize persistence and cost accumulator
+    cost_accumulator = CostAccumulator()
+    if recorder:
+        await recorder.create_call(
+            call_id=call_id,
+            phone=call_request.phone,
+            persona=call_request.persona,
+            language=call_request.language,
+            lead_id=call_request.lead_id,
+            campaign_id=call_request.campaign_id,
+            metadata_json=call_request.dynamic_variables.model_dump(),
+        )
 
     # Initialize components via provider registry
     stt_provider = get_stt(resolved_settings.stt, api_key=resolved_settings.deepgram_api_key)
@@ -103,6 +123,15 @@ async def run_agent_session(ctx: JobContext, settings: Settings | None = None) -
         kb_config=resolved_settings.kb,
     )
 
+    async def handle_agent_event(event_type: str, payload: dict[str, Any]) -> None:
+        if recorder:
+            await recorder.record_event(
+                call_id=call_id,
+                event_type=event_type,
+                state=payload.get("to_state"),
+                payload=payload,
+            )
+
     agent = PersonaAgent(
         fsm=fsm,
         prompt_manager=prompt_manager,
@@ -110,6 +139,7 @@ async def run_agent_session(ctx: JobContext, settings: Settings | None = None) -
         llm_primary=llm_primary,
         llm_conversation=llm_conversation,
         call_id=call_id,
+        event_handler=handle_agent_event,
     )
 
     session = AgentSession(
@@ -121,6 +151,19 @@ async def run_agent_session(ctx: JobContext, settings: Settings | None = None) -
 
     # Attach event listeners
     session.on("user_transcription_timeout", lambda: fsm.record_silence())
+
+    async def on_session_shutdown() -> None:
+        if recorder:
+            await recorder.record_usage_batch(call_id, cost_accumulator.records)
+            await recorder.finalize_call(
+                call_id=call_id,
+                call_outcome=fsm.call_outcome or "other",
+                outcome_rationale=fsm.outcome_rationale or "",
+                total_cost=cost_accumulator.total_cost,
+                charging_details=cost_accumulator.get_charging_breakdown(),
+            )
+
+    ctx.add_shutdown_callback(on_session_shutdown)
 
     await session.start(agent=agent, room=ctx.room)
 
@@ -134,11 +177,25 @@ async def run_agent_session(ctx: JobContext, settings: Settings | None = None) -
             if result.category == "machine-vm":
                 logger.info("Voicemail detected by AMD; terminating call without pitching.")
                 fsm.set_outcome("voicemail", rationale="AMD detected voicemail greeting.")
+                if recorder:
+                    await recorder.finalize_call(
+                        call_id=call_id,
+                        call_outcome="voicemail",
+                        outcome_rationale="AMD detected voicemail greeting.",
+                        termination_reason="voicemail_detected",
+                    )
                 session.shutdown()
                 return
             elif result.category == "machine-ivr":
                 logger.info("Automated menu detected by AMD; terminating call.")
                 fsm.set_outcome("automated_menu", rationale="AMD detected automated IVR menu.")
+                if recorder:
+                    await recorder.finalize_call(
+                        call_id=call_id,
+                        call_outcome="automated_menu",
+                        outcome_rationale="AMD detected automated IVR menu.",
+                        termination_reason="automated_menu_detected",
+                    )
                 session.shutdown()
                 return
 

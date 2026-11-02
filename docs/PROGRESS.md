@@ -42,7 +42,7 @@
 | **B3** | **Finite State Machine Engine** | Pure-Python FSM (`src/fsm/`) with 7 states (`opener`, `reach_owner`, `conversation`, `lock_in`, `close`, `dnc_close`, `end`); allowed transition matrix; prompt-driven DNC transition; hold timers; unit tests. | **Completed** |
 | **B4** | **Prompts & Knowledge Base** | Jinja2 templates for Amelia and Michael (Nodes 1–5, bilingual guardrails, pricing tables); inline KB injector with startup token budget validator. | **Completed** |
 | **B5** | **LiveKit Voice Agent Worker** | `PersonaAgent` subclass driven by FSM; dynamic instruction and tool swapping (`Agent.update_instructions`, `Agent.update_tools`); Deepgram Nova-3 STT; ElevenLabs v3 conversational TTS; Gemini LLM + FallbackAdapter; layered AMD. | **Completed** |
-| **B6** | **Persistence & Cost Tracking** | Event recording; transcript persistence; per-call token, character, and provider cost tracking to Postgres. | Queued |
+| **B6** | **Persistence & Cost Tracking** | Event recording; transcript persistence; per-call token, character, and provider cost tracking to Postgres; `CallRecorder` service and `CostAccumulator`. | **Completed** |
 | **B7** | **FastAPI API Service** | `/api/v1/calls` native API + `/v1/convai/*` ElevenLabs emulation layer; request validation schemas matching Posivex-lead-gen. | Queued |
 | **B8** | **Transactional Webhook Outbox** | Database outbox queue; worker with exponential backoff retries; HMAC-SHA256 signature generator matching ElevenLabs contract. | Queued |
 | **B9** | **Telephony Abstraction** | `TelephonyProvider` interface; `LiveKitSIPProvider` implementation; Mock/Console provider for offline verification. | Queued |
