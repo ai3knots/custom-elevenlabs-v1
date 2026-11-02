@@ -23,7 +23,7 @@ def get_tts(config: TTSConfig, api_key: str | None = None) -> tts.TTS:
         return MockTTS()
 
     if config.provider == "elevenlabs":
-        resolved_key = api_key or os.getenv("ELEVENLABS_API_KEY")
+        resolved_key = api_key if api_key is not None else os.getenv("ELEVENLABS_API_KEY")
         if not resolved_key:
             raise ValueError(
                 "ElevenLabs API key must be provided via argument or ELEVENLABS_API_KEY environment variable."

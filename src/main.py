@@ -5,13 +5,16 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 
 import uvicorn
+from dotenv import load_dotenv
 
 from src.config import load_settings
 from src.logging import configure_logging
 
+load_dotenv()
 logger = logging.getLogger("posivex.main")
 
 
@@ -22,10 +25,18 @@ def run_agent_command(args: argparse.Namespace) -> None:
     from src.agent.session_handler import create_agent_server
 
     settings = load_settings(persona=args.persona)
+    if settings.livekit_url:
+        os.environ["LIVEKIT_URL"] = settings.livekit_url
+    if settings.livekit_api_key:
+        os.environ["LIVEKIT_API_KEY"] = settings.livekit_api_key
+    if settings.livekit_api_secret:
+        os.environ["LIVEKIT_API_SECRET"] = settings.livekit_api_secret
+
     logger.info(
-        "Starting LiveKit Voice Agent worker (%s) for persona: %s",
+        "Starting LiveKit Voice Agent worker (%s) for persona: %s (url=%s)",
         args.action,
         settings.persona,
+        settings.livekit_url or "[NOT SET]",
     )
     server = create_agent_server(settings=settings)
 

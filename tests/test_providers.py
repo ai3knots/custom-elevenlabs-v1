@@ -114,8 +114,12 @@ def test_fallback_adapter_wiring():
     assert adapter._max_retry_per_llm == 0
 
 
-def test_missing_api_keys_raise_clear_error():
+def test_missing_api_keys_raise_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that calling factory without API key raises descriptive ValueError."""
+    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+
     stt_cfg = STTConfig(provider="deepgram")
     with pytest.raises(ValueError, match="Deepgram API key must be provided"):
         get_stt(stt_cfg, api_key=None)

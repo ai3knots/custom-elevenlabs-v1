@@ -7,6 +7,7 @@ import logging
 import os
 from typing import Any
 
+from dotenv import load_dotenv
 from livekit.agents import (
     AMD,
     AgentServer,
@@ -30,6 +31,7 @@ from src.providers import (
 )
 
 logger = logging.getLogger("posivex.session")
+load_dotenv()
 
 
 def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
@@ -208,11 +210,25 @@ async def run_agent_session(
 
 def create_agent_server(settings: Settings | None = None) -> AgentServer:
     """Factory creating configured AgentServer with session entrypoint."""
-    server = AgentServer()
+    load_dotenv()
+    app_settings = settings or load_settings()
+
+    server_kwargs: dict[str, Any] = {}
+    if app_settings.livekit_url:
+        server_kwargs["ws_url"] = app_settings.livekit_url
+        os.environ["LIVEKIT_URL"] = app_settings.livekit_url
+    if app_settings.livekit_api_key:
+        server_kwargs["api_key"] = app_settings.livekit_api_key
+        os.environ["LIVEKIT_API_KEY"] = app_settings.livekit_api_key
+    if app_settings.livekit_api_secret:
+        server_kwargs["api_secret"] = app_settings.livekit_api_secret
+        os.environ["LIVEKIT_API_SECRET"] = app_settings.livekit_api_secret
+
+    server = AgentServer(**server_kwargs)
 
     @server.rtc_session()
     async def entrypoint(ctx: JobContext) -> None:
-        await run_agent_session(ctx, settings=settings)
+        await run_agent_session(ctx, settings=app_settings)
 
     return server
 

@@ -23,7 +23,7 @@ def get_stt(config: STTConfig, api_key: str | None = None) -> stt.STT:
         return MockSTT()
 
     if config.provider == "deepgram":
-        resolved_key = api_key or os.getenv("DEEPGRAM_API_KEY")
+        resolved_key = api_key if api_key is not None else os.getenv("DEEPGRAM_API_KEY")
         if not resolved_key:
             raise ValueError(
                 "Deepgram API key must be provided via argument or DEEPGRAM_API_KEY environment variable."

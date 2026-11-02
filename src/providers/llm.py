@@ -25,7 +25,7 @@ def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LL
         return MockLLM()
 
     if config.provider == "google":
-        resolved_key = api_key or os.getenv("GEMINI_API_KEY")
+        resolved_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY")
         if not resolved_key:
             raise ValueError(
                 "Gemini API key must be provided via argument or GEMINI_API_KEY environment variable."
