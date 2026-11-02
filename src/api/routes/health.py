@@ -15,6 +15,13 @@ logger = logging.getLogger("posivex.api.health")
 router = APIRouter(prefix="/health", tags=["Health"])
 
 
+@router.get("", status_code=status.HTTP_200_OK)
+@router.get("/", status_code=status.HTTP_200_OK)
+async def health_check() -> dict[str, str]:
+    """Default health check confirming the HTTP service is running."""
+    return {"status": "healthy"}
+
+
 @router.get("/live", status_code=status.HTTP_200_OK)
 async def liveness_probe() -> dict[str, str]:
     """Basic liveness probe confirming the HTTP server is running."""
