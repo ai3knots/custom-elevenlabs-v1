@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -322,6 +323,29 @@ async def run_agent_session(
                     )
                 session.shutdown()
                 return
+
+    # Ensure callee is active on the line before delivering opening greeting
+    logger.info("Waiting for callee to answer the call...")
+    try:
+        callee = await ctx.wait_for_participant()
+        max_ring_time = 60.0
+        ring_start = time.time()
+        while time.time() - ring_start < max_ring_time:
+            status = callee.attributes.get("sip.callStatus")
+            if status == "active" or not status:
+                break
+            elif status == "hangup":
+                logger.warning("Callee hung up or rejected before answer.")
+                session.shutdown()
+                return
+            await asyncio.sleep(0.3)
+        logger.info(
+            "Callee is live on the line (%s, status=%s). Speaking first message.",
+            callee.identity,
+            callee.attributes.get("sip.callStatus"),
+        )
+    except Exception as e:
+        logger.warning("Wait for participant encountered an issue, proceeding: %s", e)
 
     # Callee is human: Deliver the opening first message
     first_msg = prompt_manager.get_first_message(call_request.dynamic_variables)
