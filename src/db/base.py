@@ -49,3 +49,4 @@ async def get_db_session(
         except Exception:
             await session.rollback()
             raise
+

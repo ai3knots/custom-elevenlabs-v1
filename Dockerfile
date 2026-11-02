@@ -58,3 +58,4 @@ USER appuser
 
 ENTRYPOINT ["python", "-m", "src.main"]
 CMD ["start"]
+
