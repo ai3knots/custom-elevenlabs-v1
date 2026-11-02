@@ -104,13 +104,19 @@ async def run_agent_session(
         resolved_settings.llm,
         api_key=resolved_settings.gemini_api_key,
     )
-    llm_primary = create_fallback_llm(llm_primary_base, llm_fallback_base, resolved_settings.llm)
-
     llm_conversation_base = get_llm(
         resolved_settings.llm.conversation_model,
         resolved_settings.llm,
         api_key=resolved_settings.gemini_api_key,
     )
+
+    # Share a single thought_signatures dictionary across all Gemini LLM instances
+    shared_thought_signatures: dict[str, bytes] = {}
+    for base_llm in (llm_primary_base, llm_fallback_base, llm_conversation_base):
+        if hasattr(base_llm, "_thought_signatures"):
+            object.__setattr__(base_llm, "_thought_signatures", shared_thought_signatures)
+
+    llm_primary = create_fallback_llm(llm_primary_base, llm_fallback_base, resolved_settings.llm)
     llm_conversation = create_fallback_llm(llm_conversation_base, llm_fallback_base, resolved_settings.llm)
 
     # Initialize FSM and PromptManager

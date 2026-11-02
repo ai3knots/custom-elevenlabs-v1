@@ -73,6 +73,13 @@ def create_fallback_llm(
     config: LLMConfig,
 ) -> llm.FallbackAdapter:
     """Wrap primary and secondary LLM instances in a LiveKit FallbackAdapter."""
+    # Ensure thought_signatures are shared between primary and secondary for multi-turn tool calling
+    p_sig = getattr(primary, "_thought_signatures", None)
+    s_sig = getattr(secondary, "_thought_signatures", None)
+    if isinstance(p_sig, dict) and isinstance(s_sig, dict):
+        p_sig.update(s_sig)
+        object.__setattr__(secondary, "_thought_signatures", p_sig)
+
     # Google GenAI API enforces a minimum RPC deadline of 10.0s.
     attempt_timeout = max(10.0, config.cascade_timeout)
     return llm.FallbackAdapter(

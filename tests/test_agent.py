@@ -126,3 +126,42 @@ def test_parse_call_request_from_room():
 
     req_invalid = parse_call_request_from_room("not-valid-json")
     assert req_invalid.phone == "+14045550000"
+
+
+def test_persona_agent_syncs_thought_signatures():
+    """Verify that PersonaAgent synchronizes thought_signatures across all LLMs and adapters."""
+    from livekit.agents.llm import FallbackAdapter
+
+    class DummyLLM:
+        def __init__(self):
+            self._thought_signatures = {}
+
+    primary_child1 = DummyLLM()
+    primary_child2 = DummyLLM()
+    primary_adapter = MagicMock(spec=FallbackAdapter)
+    primary_adapter._llm_instances = [primary_child1, primary_child2]
+
+    conversation_child1 = DummyLLM()
+    conversation_adapter = MagicMock(spec=FallbackAdapter)
+    conversation_adapter._llm_instances = [conversation_child1]
+
+    agent = PersonaAgent(
+        fsm=ConversationFSM(),
+        prompt_manager=PromptManager(persona="amelia", language="en"),
+        variables=DynamicVariables(),
+        llm_primary=primary_adapter,  # type: ignore[arg-type]
+        llm_conversation=conversation_adapter,  # type: ignore[arg-type]
+    )
+    assert agent._shared_thought_signatures is not None
+
+    # Add signature via primary
+    primary_child1._thought_signatures["call_123"] = b"sig_bytes_123"
+
+    # Verify conversation child sees it
+    assert conversation_child1._thought_signatures.get("call_123") == b"sig_bytes_123"
+
+    # Add signature via conversation
+    conversation_child1._thought_signatures["call_456"] = b"sig_bytes_456"
+
+    # Verify primary child sees it
+    assert primary_child2._thought_signatures.get("call_456") == b"sig_bytes_456"

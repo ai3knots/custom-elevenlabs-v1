@@ -41,6 +41,13 @@ class PersonaAgent(Agent):
         self.event_handler = event_handler
         self._test_session: Any | None = None
 
+        # Synchronize thought_signatures across all underlying LLM instances (including FallbackAdapters)
+        # to ensure multi-turn function call signatures are preserved across dynamic model switches and fallbacks.
+        self._shared_thought_signatures: dict[str, bytes] = {}
+        self._sync_thought_signatures(self.llm_primary)
+        if self.llm_conversation is not None:
+            self._sync_thought_signatures(self.llm_conversation)
+
         initial_prompt = self.prompt_manager.render_prompt(self.fsm.current_state, self.variables)
         initial_meta = self.fsm.metadata
 
@@ -49,6 +56,17 @@ class PersonaAgent(Agent):
             min_endpointing_delay=initial_meta.min_endpointing_delay,
             allow_interruptions=initial_meta.interruptible,
         )
+
+    def _sync_thought_signatures(self, llm_inst: Any) -> None:
+        """Point all underlying LLM instances to the shared thought_signatures dict."""
+        if hasattr(llm_inst, "_thought_signatures") and isinstance(llm_inst._thought_signatures, dict):
+            self._shared_thought_signatures.update(llm_inst._thought_signatures)
+            object.__setattr__(llm_inst, "_thought_signatures", self._shared_thought_signatures)
+
+        # If it's a FallbackAdapter or container, recurse over children
+        if hasattr(llm_inst, "_llm_instances"):
+            for child in llm_inst._llm_instances:
+                self._sync_thought_signatures(child)
 
     @property
     def active_session(self) -> Any | None:
