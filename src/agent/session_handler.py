@@ -357,7 +357,7 @@ def create_agent_server(settings: Settings | None = None) -> AgentServer:
         os.environ["LIVEKIT_API_SECRET"] = app_settings.livekit_api_secret
 
     server = AgentServer(**server_kwargs)
-    server.rtc_session(default_agent_entrypoint)
+    server.rtc_session(default_agent_entrypoint, agent_name="posivex-agent")
 
     return server
 
