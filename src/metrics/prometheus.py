@@ -46,3 +46,4 @@ POSIVEX_ACTIVE_CALLS = Gauge(
 def get_latest_metrics() -> tuple[bytes, str]:
     """Generate Prometheus exposition text and content type."""
     return prometheus_client.generate_latest(), CONTENT_TYPE_LATEST
+

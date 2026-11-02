@@ -22,8 +22,15 @@ def run_agent_command(args: argparse.Namespace) -> None:
     from src.agent.session_handler import create_agent_server
 
     settings = load_settings(persona=args.persona)
-    logger.info("Starting LiveKit Voice Agent worker for persona: %s", settings.persona)
+    logger.info(
+        "Starting LiveKit Voice Agent worker (%s) for persona: %s",
+        args.action,
+        settings.persona,
+    )
     server = create_agent_server(settings=settings)
+
+    # Bridge CLI subaction (start, dev, console) into LiveKit's Typer runner
+    sys.argv = [sys.argv[0], args.action]
     cli.run_app(server)
 
 
@@ -108,6 +115,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 1. Agent subcommand
     agent_p = subparsers.add_parser("agent", help="Start the LiveKit Voice Agent worker")
+    agent_p.add_argument(
+        "action",
+        nargs="?",
+        choices=["start", "dev", "console"],
+        default="start",
+        help="Worker lifecycle action: start (production), dev (live reload), or console (interactive)",
+    )
     agent_p.add_argument(
         "--persona",
         choices=["amelia", "michael"],

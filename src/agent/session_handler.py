@@ -215,3 +215,10 @@ def create_agent_server(settings: Settings | None = None) -> AgentServer:
         await run_agent_session(ctx, settings=settings)
 
     return server
+
+
+if __name__ == "__main__":
+    from livekit.agents import cli
+
+    cli.run_app(create_agent_server())
+

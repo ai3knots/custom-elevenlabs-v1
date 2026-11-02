@@ -10,9 +10,15 @@ from src.main import build_parser
 def test_cli_parser_agent_subcommand() -> None:
     """Test argument parsing for 'agent' subcommand."""
     parser = build_parser()
-    args = parser.parse_args(["agent", "--persona", "michael"])
+    args = parser.parse_args(["agent", "dev", "--persona", "michael"])
     assert args.command == "agent"
+    assert args.action == "dev"
     assert args.persona == "michael"
+
+    # Default action
+    args_default = parser.parse_args(["agent"])
+    assert args_default.action == "start"
+    assert args_default.persona == "amelia"
 
 
 def test_cli_parser_api_subcommand() -> None:
@@ -46,3 +52,4 @@ def test_cli_parser_missing_command() -> None:
     parser = build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args([])
+

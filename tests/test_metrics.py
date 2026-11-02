@@ -54,3 +54,4 @@ async def test_api_metrics_endpoint() -> None:
         assert "posivex_active_calls" in resp.text
 
     await engine.dispose()
+
