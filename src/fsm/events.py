@@ -41,3 +41,4 @@ class TransitionEvent:
     to_state: State
     reason: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+

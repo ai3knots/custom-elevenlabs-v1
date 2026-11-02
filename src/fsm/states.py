@@ -124,3 +124,4 @@ STATE_REGISTRY: dict[State, StateMetadata] = {
         interruptible=False,
     ),
 }
+
