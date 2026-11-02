@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 from dotenv import load_dotenv
+from livekit import rtc
 from livekit.agents import (
     AMD,
     AgentServer,
@@ -328,22 +329,29 @@ async def run_agent_session(
     logger.info("Waiting for callee to answer the call...")
     try:
         callee = await ctx.wait_for_participant()
-        max_ring_time = 60.0
-        ring_start = time.time()
-        while time.time() - ring_start < max_ring_time:
-            status = callee.attributes.get("sip.callStatus")
-            if status == "active" or not status:
-                break
-            elif status == "hangup":
-                logger.warning("Callee hung up or rejected before answer.")
-                session.shutdown()
-                return
-            await asyncio.sleep(0.3)
-        logger.info(
-            "Callee is live on the line (%s, status=%s). Speaking first message.",
-            callee.identity,
-            callee.attributes.get("sip.callStatus"),
+        is_sip = (
+            callee.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
+            or callee.identity.startswith("phone_")
         )
+        if is_sip:
+            max_ring_time = 60.0
+            ring_start = time.time()
+            while time.time() - ring_start < max_ring_time:
+                status = callee.attributes.get("sip.callStatus")
+                if status == "active":
+                    break
+                elif status == "hangup":
+                    logger.warning("Callee hung up or rejected before answer.")
+                    session.shutdown()
+                    return
+                await asyncio.sleep(0.5)
+            logger.info(
+                "SIP callee answered (%s, status=%s). Speaking first message.",
+                callee.identity,
+                callee.attributes.get("sip.callStatus"),
+            )
+        else:
+            logger.info("Non-SIP participant joined (%s).", callee.identity)
     except Exception as e:
         logger.warning("Wait for participant encountered an issue, proceeding: %s", e)
 

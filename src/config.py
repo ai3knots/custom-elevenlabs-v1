@@ -57,7 +57,7 @@ class TTSConfig(BaseModel):
     """Text-to-Speech configuration settings."""
 
     provider: Literal["elevenlabs", "mock"] = "elevenlabs"
-    model: str = "eleven_v3_conversational"
+    model: str = "eleven_turbo_v2_5"
     voice_id: str = "eXpIbVcVbLo8ZJQDlDnl"  # Default Amelia voice
     encoding: Literal["pcm_24000", "pcm_16000", "ulaw_8000"] = "pcm_24000"
     stability: float = 0.5
