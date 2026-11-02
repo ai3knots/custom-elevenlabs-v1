@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 
 from livekit import api
@@ -43,9 +44,10 @@ class LiveKitSIPProvider(TelephonyProvider):
 
         logger.info("Dispatching voice agent worker to room %s for call %s", room_name, call_id)
         # 1. Dispatch Voice Agent worker to the room
+        agent_name = os.environ.get("LIVEKIT_AGENT_NAME", "posivex-agent")
         await lkapi.agent_dispatch.create_dispatch(
             api.CreateAgentDispatchRequest(
-                agent_name="posivex-agent",
+                agent_name=agent_name,
                 room=room_name,
                 metadata=request.model_dump_json(),
             )

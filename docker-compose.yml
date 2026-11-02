@@ -53,6 +53,7 @@ services:
       - .env
     environment:
       - LIVEKIT_URL=ws://livekit-server:7880
+      - LIVEKIT_AGENT_NAME=posivex-agent
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-posivex}:${POSTGRES_PASSWORD:-posivex_secure_pass}@postgres:5432/${POSTGRES_DB:-posivex_calls}
     depends_on:
       livekit-server:
@@ -73,6 +74,7 @@ services:
       - .env
     environment:
       - LIVEKIT_URL=ws://livekit-server:7880
+      - LIVEKIT_AGENT_NAME=posivex-agent
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-posivex}:${POSTGRES_PASSWORD:-posivex_secure_pass}@postgres:5432/${POSTGRES_DB:-posivex_calls}
     depends_on:
       postgres:
