@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterable, Callable, Coroutine, Iterable
 from typing import Any
 
-from livekit.agents import Agent
+from livekit import rtc
+from livekit.agents import Agent, ModelSettings, RunContext, stt
 from livekit.agents.llm import LLM, ToolError, function_tool
 
+from src.agent.interruption import build_ignore_keys, drop_backchannel_transcripts
 from src.config import DynamicVariables
 from src.db.models import CallOutcome
 from src.fsm.events import FSMError
@@ -17,6 +20,8 @@ from src.fsm.states import DNC_APOLOGY_SPEECH, State, StateMetadata
 from src.prompts.manager import PromptManager
 
 logger = logging.getLogger("posivex.agent")
+
+CLOSING_LINE_TIMEOUT_SECS = 20.0
 
 EventHandler = Callable[[str, dict[str, Any]], None] | Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]
 
@@ -33,8 +38,10 @@ class PersonaAgent(Agent):
         llm_conversation: LLM,
         call_id: str | None = None,
         event_handler: EventHandler | None = None,
+        ignore_terms: Iterable[str] = (),
     ) -> None:
         self.fsm = fsm
+        self._ignore_keys = build_ignore_keys(ignore_terms)
         self.prompt_manager = prompt_manager
         self.variables = variables
         self.llm_primary = llm_primary
@@ -56,6 +63,7 @@ class PersonaAgent(Agent):
         super().__init__(
             instructions=initial_prompt,
             min_endpointing_delay=initial_meta.min_endpointing_delay,
+            max_endpointing_delay=initial_meta.max_endpointing_delay,
             allow_interruptions=initial_meta.interruptible,
         )
 
@@ -80,6 +88,19 @@ class PersonaAgent(Agent):
         except RuntimeError:
             return None
 
+    def _agent_is_speaking(self) -> bool:
+        session = self.active_session
+        return session is not None and getattr(session, "agent_state", None) == "speaking"
+
+    async def stt_node(
+        self, audio: AsyncIterable[rtc.AudioFrame], model_settings: ModelSettings
+    ) -> AsyncIterable[stt.SpeechEvent | str]:
+        """Default STT, minus backchannel-only transcripts while the agent is talking."""
+        events = Agent.default.stt_node(self, audio, model_settings)
+        if not self._ignore_keys:
+            return events
+        return drop_backchannel_transcripts(events, self._ignore_keys, self._agent_is_speaking)
+
     def attach_test_session(self, session: Any) -> None:
         """Attach a mock or test session for isolated unit testing."""
         self._test_session = session
@@ -96,7 +117,7 @@ class PersonaAgent(Agent):
             logger.error("Error in event handler: %s", e, exc_info=True)
 
     @function_tool
-    async def transition(self, to: str, reason: str = "") -> str:
+    async def transition(self, to: str, reason: str = "", context: RunContext = None) -> str:  # type: ignore[assignment]
         """Request a transition to another state in the sales conversation.
 
         Args:
@@ -111,7 +132,7 @@ class PersonaAgent(Agent):
             raise ToolError(
                 f"{e}. From '{self.fsm.current_state.value}' you may only move to: {allowed or 'nowhere'}."
             ) from e
-        await self._apply_state(new_state)
+        await self._apply_state(new_state, context)
         await self._emit_event(
             "state_transition",
             {
@@ -164,7 +185,7 @@ class PersonaAgent(Agent):
         # Returning None completes the tool without a follow-up reply, so the agent stays quiet.
         return None
 
-    async def _apply_state(self, new_state: State) -> None:
+    async def _apply_state(self, new_state: State, context: RunContext | None = None) -> None:
         """Update instructions, models, and turn settings to match the new state."""
         meta: StateMetadata = self.fsm.get_metadata(new_state)
 
@@ -189,6 +210,13 @@ class PersonaAgent(Agent):
         # 2. Terminal state handling
         if new_state == State.END:
             logger.info("Entering END state: shutting down session.")
+            # The closing line is spoken in the same step as this tool call; let it finish playing
+            # before the session closes (and the room, and with it the SIP leg, is deleted).
+            if context is not None:
+                try:
+                    await asyncio.wait_for(context.wait_for_playout(), timeout=CLOSING_LINE_TIMEOUT_SECS)
+                except TimeoutError:
+                    logger.warning("Closing line did not finish playing within %.0fs.", CLOSING_LINE_TIMEOUT_SECS)
             session = self.active_session
             if session is not None:
                 session.shutdown()
@@ -207,4 +235,9 @@ class PersonaAgent(Agent):
         # Update endpointing delay for the new state
         session = self.active_session
         if session is not None and hasattr(session, "update_options"):
-            session.update_options(endpointing_opts={"min_delay": meta.min_endpointing_delay})
+            session.update_options(
+                endpointing_opts={
+                    "min_delay": meta.min_endpointing_delay,
+                    "max_delay": meta.max_endpointing_delay,
+                }
+            )

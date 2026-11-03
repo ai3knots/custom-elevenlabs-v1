@@ -44,7 +44,7 @@ class LLMConfig(BaseModel):
     """Large Language Model configuration settings."""
 
     provider: Literal["google", "mock"] = "google"
-    default_model: str = "gemini-3.5-flash-lite"
+    default_model: str = "gemini-3.5-flash"
     conversation_model: str = "gemini-3.5-flash"
     fallback_model: str = "gemini-3.5-flash"
     temperature: float = 0.0
@@ -57,11 +57,11 @@ class TTSConfig(BaseModel):
     """Text-to-Speech configuration settings."""
 
     provider: Literal["elevenlabs", "mock"] = "elevenlabs"
-    model: str = "eleven_turbo_v2_5"
+    model: str = "eleven_v3_conversational"
     voice_id: str = "eXpIbVcVbLo8ZJQDlDnl"  # Default Amelia voice
     encoding: Literal["pcm_24000", "pcm_16000", "ulaw_8000"] = "pcm_24000"
     stability: float = 0.5
-    similarity_boost: float = 0.8
+    similarity_boost: float = 0.75
     expressive: bool = True
 
 
@@ -77,7 +77,7 @@ class VADConfig(BaseModel):
 class TurnDetectorConfig(BaseModel):
     """Turn detection mode configuration."""
 
-    mode: Literal["stt-only", "multimodal", "eou"] = "stt-only"
+    mode: Literal["vad", "stt-only", "multimodal", "eou"] = "vad"
 
 
 class ConversationConfig(BaseModel):
@@ -89,6 +89,7 @@ class ConversationConfig(BaseModel):
     hold_duration_seconds: float = 12.0
     amd_enabled: bool = True
     ring_timeout_seconds: float = 75.0
+    interruption_min_words: int = 1
     amd_no_speech_seconds: float = 6.0
     interruption_ignore_terms: list[str] = Field(
         default_factory=lambda: [

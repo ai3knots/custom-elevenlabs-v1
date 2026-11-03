@@ -21,7 +21,7 @@ def test_load_defaults():
     assert settings.stt.provider == "deepgram"
     assert settings.stt.model == "nova-3"
     assert settings.llm.provider == "google"
-    assert settings.llm.default_model == "gemini-3.5-flash-lite"
+    assert settings.llm.default_model == "gemini-3.5-flash"
     assert settings.tts.provider == "elevenlabs"
     assert settings.tts.voice_id == "eXpIbVcVbLo8ZJQDlDnl"
     assert settings.vad.provider == "silero"
@@ -37,7 +37,7 @@ def test_persona_layering_michael():
     assert settings.tts.voice_id == "flq6f7yk4E4fJM5XTYuZ"
     # Shared defaults remain intact
     assert settings.stt.model == "nova-3"
-    assert settings.llm.default_model == "gemini-3.5-flash-lite"
+    assert settings.llm.default_model == "gemini-3.5-flash"
 
 
 def test_dispatch_overrides():
@@ -107,3 +107,13 @@ def test_call_request_elevenlabs_aliases():
     assert req.dynamic_variables.is_followup == "true"
     assert req.dynamic_variables.contact_name == "Tony"
 
+
+
+def test_routing_states_use_flash_not_flash_lite():
+    """Opener, reach_owner, lock_in and conversation all route on gemini-3.5-flash (as live ElevenLabs does)."""
+    from src.fsm.states import STATE_REGISTRY, State
+
+    for state in (State.OPENER, State.REACH_OWNER, State.CONVERSATION, State.LOCK_IN):
+        assert STATE_REGISTRY[state].default_model == "gemini-3.5-flash"
+    settings = load_settings()
+    assert settings.llm.default_model == settings.llm.conversation_model == "gemini-3.5-flash"

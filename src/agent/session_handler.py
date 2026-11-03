@@ -17,6 +17,7 @@ from livekit.agents import (
     AgentServer,
     AgentSession,
     JobContext,
+    TurnHandlingOptions,
     room_io,
 )
 from livekit.agents.metrics.usage import LLMModelUsage, STTModelUsage, TTSModelUsage
@@ -26,7 +27,7 @@ from src.agent.persona_agent import PersonaAgent
 from src.config import CallRequest, Settings, load_settings
 from src.db.base import get_engine, get_sessionmaker
 from src.fsm.machine import ConversationFSM
-from src.fsm.states import State
+from src.fsm.states import State, StateMetadata
 from src.logging import set_call_id
 from src.metrics.costs import CostAccumulator
 from src.persistence.recorder import CallRecorder
@@ -121,6 +122,28 @@ async def _wait_for_answer(callee: rtc.RemoteParticipant, timeout: float) -> str
             return "hangup"
         await asyncio.sleep(0.5)
     return "timeout"
+
+
+def build_turn_handling(settings: Settings, meta: StateMetadata) -> TurnHandlingOptions:
+    """Turn-taking options for AgentSession: end-of-turn strategy, endpointing and interruptions."""
+    turn_handling: TurnHandlingOptions = {
+        "endpointing": {
+            "min_delay": meta.min_endpointing_delay,
+            "max_delay": meta.max_endpointing_delay,
+        },
+        # A transcribed word is required before the caller can interrupt, which is what lets
+        # PersonaAgent.stt_node swallow "mm-hmm" style acknowledgements.
+        "interruption": {"min_words": settings.conversation.interruption_min_words},
+    }
+    mode = settings.turn_detector.mode
+    if mode == "vad":
+        turn_handling["turn_detection"] = "vad"
+    elif mode == "stt-only":
+        turn_handling["turn_detection"] = "stt"
+    else:
+        logger.warning("Turn detector mode '%s' is not available; using VAD.", mode)
+        turn_handling["turn_detection"] = "vad"
+    return turn_handling
 
 
 def _settings_for_call(base: Settings | None, call_request: CallRequest) -> Settings:
@@ -287,6 +310,7 @@ async def run_agent_session(
         llm_conversation=llm_conversation,
         call_id=call_id,
         event_handler=handle_agent_event,
+        ignore_terms=resolved_settings.conversation.interruption_ignore_terms,
     )
 
     conv_cfg = resolved_settings.conversation
@@ -296,7 +320,7 @@ async def run_agent_session(
         tts=tts_provider,
         vad=vad_provider,
         user_away_timeout=conv_cfg.silence_timeout_seconds,
-        turn_handling={"endpointing": {"min_delay": fsm.metadata.min_endpointing_delay}},
+        turn_handling=build_turn_handling(resolved_settings, fsm.metadata),
     )
 
     # ---- Transcript capture -------------------------------------------------------------------

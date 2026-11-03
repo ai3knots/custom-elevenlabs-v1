@@ -207,3 +207,26 @@ def test_persona_agent_syncs_thought_signatures():
 
     # Verify primary child sees it
     assert primary_child2._thought_signatures.get("call_456") == b"sig_bytes_456"
+
+
+async def test_end_transition_waits_for_closing_line_before_shutdown(agent_fixture):
+    """The Close step speaks and calls transition('end') in one step; shutdown must follow playout."""
+    agent, fsm, _ = agent_fixture
+    for state in ("conversation", "close"):
+        await fsm.transition(state, reason="setup")
+
+    order: list[str] = []
+    session = MagicMock()
+    session.shutdown = MagicMock(side_effect=lambda **_: order.append("shutdown"))
+    agent.attach_test_session(session)
+
+    context = MagicMock()
+
+    async def playout() -> None:
+        order.append("playout")
+
+    context.wait_for_playout = playout
+
+    await agent.transition("end", reason="closing line delivered", context=context)
+
+    assert order == ["playout", "shutdown"]

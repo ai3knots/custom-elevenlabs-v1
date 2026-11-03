@@ -38,6 +38,7 @@ class StateMetadata:
     default_model: str
     min_endpointing_delay: float
     interruptible: bool = True
+    max_endpointing_delay: float = 3.0
     canned_speech: str | None = None
     default_outcome: str | None = None
 
@@ -56,9 +57,10 @@ STATE_REGISTRY: dict[State, StateMetadata] = {
         allowed_transitions=frozenset(
             {State.REACH_OWNER, State.CONVERSATION, State.DNC_CLOSE, State.END}
         ),
-        default_model="gemini-3.5-flash-lite",
+        default_model="gemini-3.5-flash",
         min_endpointing_delay=0.3,
         interruptible=True,
+        max_endpointing_delay=2.0,  # eager: detect the end of a greeting sooner
     ),
     State.REACH_OWNER: StateMetadata(
         state=State.REACH_OWNER,
@@ -67,7 +69,7 @@ STATE_REGISTRY: dict[State, StateMetadata] = {
         allowed_transitions=frozenset(
             {State.CONVERSATION, State.CLOSE, State.DNC_CLOSE, State.END}
         ),
-        default_model="gemini-3.5-flash-lite",
+        default_model="gemini-3.5-flash",
         min_endpointing_delay=0.5,
         interruptible=True,
     ),
@@ -90,16 +92,17 @@ STATE_REGISTRY: dict[State, StateMetadata] = {
         allowed_transitions=frozenset(
             {State.CONVERSATION, State.CLOSE, State.DNC_CLOSE, State.END}
         ),
-        default_model="gemini-3.5-flash-lite",
+        default_model="gemini-3.5-flash",
         min_endpointing_delay=1.0,
         interruptible=True,
+        max_endpointing_delay=6.0,  # patient: emails and phone numbers get dictated slowly
     ),
     State.CLOSE: StateMetadata(
         state=State.CLOSE,
         entry_behavior=EntryBehavior.GENERATE_IMMEDIATELY,
         prompt_fragment_file="nodes/node_5_close.md",
         allowed_transitions=frozenset({State.END}),
-        default_model="gemini-3.5-flash-lite",
+        default_model="gemini-3.5-flash",
         min_endpointing_delay=0.4,
         interruptible=True,
     ),

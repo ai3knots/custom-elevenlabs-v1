@@ -51,10 +51,11 @@ def test_render_base_prompt_variable_substitution(sample_variables: DynamicVaria
     assert "You are Amelia" in base_prompt
     assert "Business: Tony's Pizza & Grill" in base_prompt
     assert "Background: Pizza restaurant in Atlanta" in base_prompt
-    assert "Current Date & Time: Tuesday, October 20, 2026" in base_prompt
-    assert "Follow-up Status: true" in base_prompt
-    assert "Contact Name: Tony" in base_prompt
-    assert "Bilingual Guardrail (English & Spanish)" in base_prompt
+    assert "Current date and time: Tuesday, October 20, 2026" in base_prompt
+    assert "Follow-up: true" in base_prompt
+    assert "Contact name: Tony" in base_prompt
+    assert "# Language" in base_prompt
+    assert "{{" not in base_prompt
     assert "0.10%" in base_prompt
 
 
@@ -76,14 +77,16 @@ def test_state_prompt_composition(sample_variables: DynamicVariables):
     # Conversation (includes inline KB)
     p_conv = pm.render_prompt(State.CONVERSATION, sample_variables)
     assert "Node 3: Conversation" in p_conv
-    assert "The Five Beats" in p_conv
+    assert "# The five beats" in p_conv
+    assert 'transition("lock_in' in p_conv
     assert "# Knowledge Base" in p_conv
     assert "Clover Posivex Knowledge Base" in p_conv
 
     # Lock In
     p_lock = pm.render_prompt(State.LOCK_IN, sample_variables)
     assert "Node 4: Lock In Next Step" in p_lock
-    assert "Backward Loop Rule" in p_lock
+    assert 'transition("conversation"' in p_lock
+    assert "Perfect, you're all set." in p_lock
 
     # Close
     p_close = pm.render_prompt(State.CLOSE, sample_variables)
@@ -142,3 +145,20 @@ def test_estimate_token_count_utility():
     text = "one two three four five six seven eight nine ten"
     assert estimate_token_count(text) == 13
 
+
+
+def test_node_prompts_use_tools_not_elevenlabs_workflow(sample_variables: DynamicVariables):
+    """Ported prompts reference our tools and leave no ElevenLabs-only wording or raw template tags."""
+    for persona in ("amelia", "michael"):
+        pm = PromptManager(persona=persona, language="en")
+        for state in (State.OPENER, State.REACH_OWNER, State.CONVERSATION, State.LOCK_IN, State.CLOSE):
+            prompt = pm.render_prompt(state, sample_variables)
+            assert "{{" not in prompt and "{%" not in prompt
+            assert "voicemail detection" not in prompt
+            assert "voicemail_detection" not in prompt
+            assert "The workflow" not in prompt
+    opener = PromptManager(persona="amelia").render_prompt(State.OPENER, sample_variables)
+    assert 'set_call_outcome("voicemail"' in opener
+    assert 'transition("end"' in opener
+    assert "A business greeting is not an answer" in opener
+    assert "Michael" in PromptManager(persona="michael").render_prompt(State.OPENER, sample_variables)

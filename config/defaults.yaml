@@ -21,7 +21,7 @@ stt:
 
 llm:
   provider: "google"
-  default_model: "gemini-3.5-flash-lite"
+  default_model: "gemini-3.5-flash"
   conversation_model: "gemini-3.5-flash"
   fallback_model: "gemini-3.5-flash"
   temperature: 0.0
@@ -35,7 +35,7 @@ tts:
   voice_id: "eXpIbVcVbLo8ZJQDlDnl" # Amelia voice
   encoding: "pcm_24000"
   stability: 0.5
-  similarity_boost: 0.8
+  similarity_boost: 0.75
   expressive: true
 
 vad:
@@ -45,13 +45,14 @@ vad:
   prefix_padding_duration: 0.5
 
 turn_detector:
-  mode: "stt-only"
+  mode: "vad" # "vad" | "stt-only"; multimodal/eou are not available and fall back to vad
 
 conversation:
   max_duration_seconds: 900
   silence_timeout_seconds: 15.0
   max_silence_count: 3
   hold_duration_seconds: 12.0
+  interruption_min_words: 1
   interruption_ignore_terms:
     - "mmhmm"
     - "uhhuh"
