@@ -44,7 +44,7 @@ def test_persona_agent_initialization(agent_fixture):
     assert fsm.current_state == State.OPENER
     assert "You are Amelia" in agent.instructions
     assert "Node 1: Opener & Route" in agent.instructions
-    assert len(agent.tools) == 2  # transition and skip_turn tools
+    assert len(agent.tools) == 3  # transition, set_call_outcome and skip_turn tools
 
 
 @pytest.mark.asyncio
@@ -73,7 +73,7 @@ async def test_agent_skip_turn_registers_hold(agent_fixture):
     assert not fsm.is_holding
 
     reply = await agent.skip_turn(reason="One second, checking")
-    assert "Hold requested" in reply
+    assert reply is None  # None completes the tool without a spoken follow-up
     assert fsm.is_holding
 
 
@@ -120,12 +120,54 @@ def test_parse_call_request_from_room():
     assert req.language == "es"
     assert req.dynamic_variables.business_name == "Tacos El Rey"
 
-    # Fallback on empty or invalid metadata
-    req_empty = parse_call_request_from_room("")
-    assert req_empty.phone == "+14045550000"
+    # Missing or invalid metadata is refused instead of dialing a placeholder number
+    with pytest.raises(ValueError):
+        parse_call_request_from_room("")
+    with pytest.raises(ValueError):
+        parse_call_request_from_room("not-valid-json")
 
-    req_invalid = parse_call_request_from_room("not-valid-json")
-    assert req_invalid.phone == "+14045550000"
+
+def test_parse_call_request_dev_fallback(monkeypatch):
+    """ALLOW_DEFAULT_CALL_REQUEST restores the placeholder request for local development."""
+    monkeypatch.setenv("ALLOW_DEFAULT_CALL_REQUEST", "true")
+    assert parse_call_request_from_room("").phone == "+14045550000"
+    assert parse_call_request_from_room("not-valid-json").phone == "+14045550000"
+
+
+@pytest.mark.asyncio
+async def test_set_call_outcome_records_and_validates(agent_fixture):
+    """The LLM-facing outcome tool stores valid outcomes and rejects unknown ones."""
+    from livekit.agents.llm import ToolError
+
+    agent, fsm, _ = agent_fixture
+    await agent.set_call_outcome("Consultant Call Scheduled", rationale="Demo Tue 3pm, tony@x.com")
+    assert fsm.call_outcome == "consultant_call_scheduled"
+    assert "tony@x.com" in (fsm.outcome_rationale or "")
+
+    with pytest.raises(ToolError):
+        await agent.set_call_outcome("made_up")
+
+
+@pytest.mark.asyncio
+async def test_illegal_transition_surfaces_tool_error(agent_fixture):
+    """An illegal transition tells the LLM which states are allowed."""
+    from livekit.agents.llm import ToolError
+
+    agent, fsm, _ = agent_fixture
+    with pytest.raises(ToolError, match="may only move to"):
+        await agent.transition("lock_in", reason="skipping ahead")
+    assert fsm.current_state == State.OPENER
+
+
+def test_resolve_outcome_fallbacks():
+    """Fallback outcomes follow the CRM's hangup_no_speak / unknown_dropped contract."""
+    from src.agent.session_handler import _resolve_outcome
+
+    fsm = ConversationFSM()
+    assert _resolve_outcome(fsm, 0)[0] == "hangup_no_speak"
+    assert _resolve_outcome(fsm, 2)[0] == "unknown_dropped"
+    fsm.set_outcome("callback_set", "Thursday 10am")
+    assert _resolve_outcome(fsm, 2) == ("callback_set", "Thursday 10am")
 
 
 def test_persona_agent_syncs_thought_signatures():

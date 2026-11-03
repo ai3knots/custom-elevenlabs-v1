@@ -58,6 +58,30 @@ class CallRecorder:
             logger.info("Persisted initial call record: id=%s, phone=%s", call_id, phone)
             return call
 
+    async def ensure_call(
+        self,
+        call_id: str,
+        phone: str,
+        persona: str = "amelia",
+        language: str = "en",
+        lead_id: str | None = None,
+        campaign_id: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> Call:
+        """Return the existing Call row, or create one when the API did not (e.g. browser test calls)."""
+        existing = await self.get_call(call_id)
+        if existing is not None:
+            return existing
+        return await self.create_call(
+            call_id=call_id,
+            phone=phone,
+            persona=persona,
+            language=language,
+            lead_id=lead_id,
+            campaign_id=campaign_id,
+            metadata_json=metadata_json,
+        )
+
     async def record_event(
         self,
         call_id: str,
@@ -99,6 +123,31 @@ class CallRecorder:
             session.add(entry)
             await session.commit()
             return entry
+
+    async def record_transcript_batch(
+        self,
+        call_id: str,
+        entries: list[dict[str, Any]],
+    ) -> int:
+        """Persist buffered utterances (role, message, time_in_call_secs, interrupted) in one transaction."""
+        if not entries:
+            return 0
+
+        async with self.session_factory() as session:
+            now = datetime.now(UTC)
+            for item in entries:
+                session.add(
+                    Transcript(
+                        call_id=call_id,
+                        role=item["role"],
+                        message=item["message"],
+                        time_in_call_secs=round(item.get("time_in_call_secs", 0.0), 2),
+                        interrupted=bool(item.get("interrupted", False)),
+                        created_at=now,
+                    )
+                )
+            await session.commit()
+            return len(entries)
 
     async def record_usage_batch(
         self,

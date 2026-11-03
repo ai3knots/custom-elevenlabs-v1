@@ -10,5 +10,5 @@ Never say or imply a demo or callback is booked if no day and time were agreed.
 If nothing was confirmed, thank them and leave the door open.
 Do not pitch. Do not ask a new question.
 
-Once you have delivered the closing remark, call `transition("end", reason=...)` to conclude the call.
+Once you have delivered the closing remark, make sure an outcome has been recorded with `set_call_outcome(...)` (use `other` only if nothing else fits), then call `transition("end", reason=...)` to conclude the call.
 

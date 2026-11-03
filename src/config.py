@@ -87,6 +87,9 @@ class ConversationConfig(BaseModel):
     silence_timeout_seconds: float = 15.0
     max_silence_count: int = 3
     hold_duration_seconds: float = 12.0
+    amd_enabled: bool = True
+    ring_timeout_seconds: float = 75.0
+    amd_no_speech_seconds: float = 6.0
     interruption_ignore_terms: list[str] = Field(
         default_factory=lambda: [
             "mmhmm",

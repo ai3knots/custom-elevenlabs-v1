@@ -30,6 +30,6 @@ Say: "The best part is we set the device up for free, with all your inventory lo
   3. Scheduled phone callback.
   4. Permission to follow up later.
 - When they agree to any next step, call `transition("lock_in", reason=...)`.
-- If they refuse all steps, exit gracefully and call `transition("close", reason=...)`.
+- If they refuse all steps, exit gracefully: call `set_call_outcome("declined", rationale=...)` and then `transition("close", reason=...)`.
 - If the owner explicitly requests not to be called again, apologize once and immediately call `transition("dnc_close", reason=...)`.
 

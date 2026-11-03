@@ -180,3 +180,23 @@ async def test_call_recorder_end_to_end(async_session_factory):
         assert len(queried.transcripts) == 2
         assert len(queried.usage_costs) == 4
         assert len(queried.webhook_outbox) == 1
+
+
+@pytest.mark.asyncio
+async def test_recorder_ensure_call_and_transcript_batch(async_session_factory):
+    """ensure_call must not duplicate the API's row; transcripts persist in one batch."""
+    recorder = CallRecorder(async_session_factory)
+
+    first = await recorder.ensure_call(call_id="call_ens_1", phone="+14045551234")
+    again = await recorder.ensure_call(call_id="call_ens_1", phone="+14045551234")
+    assert first.id == again.id
+
+    saved = await recorder.record_transcript_batch(
+        "call_ens_1",
+        [
+            {"role": "agent", "message": "Hi, this is Amelia.", "time_in_call_secs": 1.2},
+            {"role": "user", "message": "Hello?", "time_in_call_secs": 3.4, "interrupted": True},
+        ],
+    )
+    assert saved == 2
+    assert await recorder.record_transcript_batch("call_ens_1", []) == 0

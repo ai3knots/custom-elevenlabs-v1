@@ -7,9 +7,11 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from livekit.agents import Agent
-from livekit.agents.llm import LLM, function_tool
+from livekit.agents.llm import LLM, ToolError, function_tool
 
 from src.config import DynamicVariables
+from src.db.models import CallOutcome
+from src.fsm.events import FSMError
 from src.fsm.machine import ConversationFSM
 from src.fsm.states import DNC_APOLOGY_SPEECH, State, StateMetadata
 from src.prompts.manager import PromptManager
@@ -98,11 +100,17 @@ class PersonaAgent(Agent):
         """Request a transition to another state in the sales conversation.
 
         Args:
-            to: Target state name ('reach_owner', 'conversation', 'lock_in', 'close', 'dnc_close')
+            to: Target state name ('reach_owner', 'conversation', 'lock_in', 'close', 'dnc_close', 'end')
             reason: Justification based on what the prospect said
         """
         logger.info("Agent requesting transition to '%s' (reason: %s)", to, reason)
-        new_state = await self.fsm.transition(to, reason=reason)
+        try:
+            new_state = await self.fsm.transition(to, reason=reason)
+        except FSMError as e:
+            allowed = ", ".join(sorted(s.value for s in self.fsm.metadata.allowed_transitions))
+            raise ToolError(
+                f"{e}. From '{self.fsm.current_state.value}' you may only move to: {allowed or 'nowhere'}."
+            ) from e
         await self._apply_state(new_state)
         await self._emit_event(
             "state_transition",
@@ -116,8 +124,30 @@ class PersonaAgent(Agent):
         return f"Successfully transitioned to state: {new_state.value}"
 
     @function_tool
-    async def skip_turn(self, reason: str = "Merchant requested hold") -> str:
-        """Pause agent turns while merchant is on hold or fetching the owner.
+    async def set_call_outcome(self, outcome: str, rationale: str = "") -> str:
+        """Record how this call ended. Call it once the result is known, in the same turn as the final transition.
+
+        Args:
+            outcome: One of 'voicemail', 'no_answer', 'automated_menu', 'employee_no_owner_details',
+                'owner_details_captured', 'callback_set', 'info_email', 'email_comparison',
+                'consultant_call_scheduled', 'declined', 'do_not_call', 'other'
+            rationale: One short sentence with the facts behind the outcome (names, emails, times agreed)
+        """
+        value = outcome.strip().lower().replace(" ", "_").replace("-", "_")
+        valid = [o.value for o in CallOutcome]
+        if value not in valid:
+            raise ToolError(f"Unknown outcome '{outcome}'. Use one of: {', '.join(valid)}.")
+        self.fsm.set_outcome(value, rationale=rationale)
+        logger.info("Agent recorded call outcome '%s' (%s)", value, rationale)
+        await self._emit_event(
+            "outcome_recorded",
+            {"outcome": value, "reason": rationale, "call_id": self.call_id},
+        )
+        return f"Outcome recorded: {value}"
+
+    @function_tool
+    async def skip_turn(self, reason: str = "Merchant requested hold") -> None:
+        """Stay silent while the merchant is on hold or fetching the owner.
 
         Args:
             reason: Why the hold was requested (e.g. 'checking with owner', 'one second')
@@ -131,7 +161,8 @@ class PersonaAgent(Agent):
                 "call_id": self.call_id,
             },
         )
-        return "Hold requested. The agent will remain silent until the merchant speaks again."
+        # Returning None completes the tool without a follow-up reply, so the agent stays quiet.
+        return None
 
     async def _apply_state(self, new_state: State) -> None:
         """Update instructions, models, and turn settings to match the new state."""
@@ -173,5 +204,7 @@ class PersonaAgent(Agent):
         else:
             self.update_options(llm=self.llm_primary)
 
-        # Update endpointing delay
-        self._min_endpointing_delay = meta.min_endpointing_delay
+        # Update endpointing delay for the new state
+        session = self.active_session
+        if session is not None and hasattr(session, "update_options"):
+            session.update_options(endpointing_opts={"min_delay": meta.min_endpointing_delay})

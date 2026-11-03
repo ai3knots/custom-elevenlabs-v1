@@ -5,7 +5,7 @@ The first message has already been spoken. If a recording answered, it may start
 ## Voicemail and Automated Answering Detection
 
 Most of our calls reach voicemail, so decide quickly. It is a machine, not a person, if the first words contain any of these or anything like them: "leave a message", "after the tone", "after the beep", "you have reached", "is not available", "unable to take your call", "mailbox", "voicemail", "press 1" or any menu, "our office hours are", or a tone.
-When it is a machine: do not say another word. Use the voicemail detection or transition tool to end the call cleanly. Do not leave a message.
+When it is a machine: do not say another word. Call `set_call_outcome("voicemail", rationale=...)` and then `transition("end", reason=...)` in the same turn. Do not leave a message.
 
 ## If a Live Person Answered
 
