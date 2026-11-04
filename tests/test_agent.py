@@ -386,3 +386,33 @@ def test_prewarmed_vad_is_reused_only_when_settings_match():
     changed.vad.min_silence_duration = 0.9
     assert _prewarmed_vad(ctx, changed) is None
     assert _prewarmed_vad(SimpleNamespace(proc=SimpleNamespace(userdata={})), settings) is None
+
+
+@pytest.mark.asyncio
+async def test_wait_for_caller_quiet_waits_for_speech_to_end():
+    import asyncio
+    from types import SimpleNamespace
+
+    from src.agent.session_handler import _wait_for_caller_quiet
+
+    session = SimpleNamespace(user_state="speaking")
+
+    async def stop_speaking() -> None:
+        await asyncio.sleep(0.2)
+        session.user_state = "listening"
+
+    task = asyncio.create_task(stop_speaking())
+    started = asyncio.get_running_loop().time()
+    assert await _wait_for_caller_quiet(session, quiet_secs=0.1, max_wait=2.0) is True
+    assert asyncio.get_running_loop().time() - started >= 0.25
+    await task
+
+
+@pytest.mark.asyncio
+async def test_wait_for_caller_quiet_gives_up_after_max_wait():
+    from types import SimpleNamespace
+
+    from src.agent.session_handler import _wait_for_caller_quiet
+
+    session = SimpleNamespace(user_state="speaking")
+    assert await _wait_for_caller_quiet(session, quiet_secs=0.1, max_wait=0.2) is False

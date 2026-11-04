@@ -129,7 +129,8 @@ def test_fallback_llm_differs_from_primary_models():
 def test_amd_timeout_default_and_llm_env_overrides(monkeypatch):
     from src.config import load_settings
 
-    assert load_settings().conversation.amd_timeout_seconds == 5.0
+    assert load_settings().conversation.amd_timeout_seconds == 3.0
+    assert load_settings().conversation.max_user_speech_seconds == 8.0
     monkeypatch.setenv("LLM_DEFAULT_MODEL", "gemini-3.5-flash-lite")
     monkeypatch.setenv("LLM_FALLBACK_MODEL", "gemini-3.5-flash")
     settings = load_settings()

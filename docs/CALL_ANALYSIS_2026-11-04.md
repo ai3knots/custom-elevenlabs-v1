@@ -151,3 +151,14 @@ Known trade-offs and things to watch on the live test:
 - Wrap-up steps no longer wait for the callee's reply, so a correction spoken after "I've got everything noted" is not captured.
 - `gemini-3.5-flash-lite` as the fallback is a name already used elsewhere in the codebase but was not exercised in these traces.
 - Prewarm reuses one Silero VAD per process only if its settings match the call's; otherwise it loads one as before.
+
+
+## 8. Follow-up: call RM_PYSbJ4pa44HW (after the first round of fixes)
+
+| Finding | Change |
+|---|---|
+| Scripted opener fired into the callee's speech, was interrupted after 0.07 s and never re-issued; impatient "Hello?"s then cancelled each LLM-written opener before playout (26 s of silence) | Opener waits for caller silence (max 3 s) and is `allow_interruptions=False`; AMD cap 5 s -> 3 s |
+| One caller turn stayed open 12.7 s (noise) and the agent did not answer for 23 s | `conversation.max_user_speech_seconds` (8 s): `session.commit_user_turn()` when the agent is idle/listening |
+| 303 ms event-loop stall building the Gemini clients at call start | `get_llm` calls run in `asyncio.to_thread` |
+| ElevenLabs 1008 websocket close on first synthesis | No change: the SDK already pre-warms and reconnects the socket, and the retry succeeded in 0.4 s |
+| Transition turns take 4-5 s (tool-call round trip, then reply) | Not changed: the reply must come from the new state's prompt, so it cannot be spoken in the same response. Compare `LLM_CONVERSATION_MODEL=gemini-3.5-flash-lite` |

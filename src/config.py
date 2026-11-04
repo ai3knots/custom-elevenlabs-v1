@@ -97,7 +97,8 @@ class ConversationConfig(BaseModel):
     # Hard cap on answering-machine detection, measured from pickup. When it expires without a
     # verdict the callee is treated as a person and greeted, so a recording notice followed by
     # "Hello?" no longer leaves 10+ seconds of silence.
-    amd_timeout_seconds: float = 5.0
+    amd_timeout_seconds: float = 3.0
+    max_user_speech_seconds: float = 8.0
     interruption_ignore_terms: list[str] = Field(
         default_factory=lambda: [
             "mmhmm",

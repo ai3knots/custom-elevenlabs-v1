@@ -161,6 +161,25 @@ async def _wait_for_answer(callee: rtc.RemoteParticipant, timeout: float) -> str
     return "timeout"
 
 
+async def _wait_for_caller_quiet(
+    session: AgentSession, *, quiet_secs: float = 0.4, max_wait: float = 3.0
+) -> bool:
+    """Wait until the caller has been silent for `quiet_secs` (True), or `max_wait` passes (False)."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max_wait
+    quiet_since: float | None = None
+    while loop.time() < deadline:
+        if session.user_state == "speaking":
+            quiet_since = None
+        else:
+            now = loop.time()
+            quiet_since = quiet_since if quiet_since is not None else now
+            if now - quiet_since >= quiet_secs:
+                return True
+        await asyncio.sleep(0.05)
+    return False
+
+
 def build_turn_handling(settings: Settings, meta: StateMetadata) -> TurnHandlingOptions:
     """Turn-taking options for AgentSession: end-of-turn strategy, endpointing and interruptions."""
     turn_handling: TurnHandlingOptions = {
@@ -259,22 +278,17 @@ async def run_agent_session(
     vad_provider = _prewarmed_vad(ctx, resolved_settings) or get_vad(resolved_settings.vad)
     tts_provider = get_tts(resolved_settings.tts, api_key=resolved_settings.elevenlabs_api_key)
 
-    # Setup primary and conversation LLMs with fallback
-    llm_primary_base = get_llm(
-        resolved_settings.llm.default_model,
-        resolved_settings.llm,
-        api_key=resolved_settings.gemini_api_key,
-    )
-    llm_fallback_base = get_llm(
-        resolved_settings.llm.fallback_model,
-        resolved_settings.llm,
-        api_key=resolved_settings.gemini_api_key,
-    )
-    llm_conversation_base = get_llm(
-        resolved_settings.llm.conversation_model,
-        resolved_settings.llm,
-        api_key=resolved_settings.gemini_api_key,
-    )
+    # Setup primary and conversation LLMs with fallback. Building a Gemini client loads the CA bundle
+    # (~300 ms of CPU), so it runs in a thread instead of stalling the event loop at call start.
+    def _build_llms() -> tuple[Any, Any, Any]:
+        key = resolved_settings.gemini_api_key
+        return (
+            get_llm(resolved_settings.llm.default_model, resolved_settings.llm, api_key=key),
+            get_llm(resolved_settings.llm.fallback_model, resolved_settings.llm, api_key=key),
+            get_llm(resolved_settings.llm.conversation_model, resolved_settings.llm, api_key=key),
+        )
+
+    llm_primary_base, llm_fallback_base, llm_conversation_base = await asyncio.to_thread(_build_llms)
 
     # Share a single thought_signatures dictionary across all Gemini LLM instances
     shared_thought_signatures: dict[str, bytes] = {}
@@ -451,8 +465,36 @@ async def run_agent_session(
             )
         )
 
+    long_turn_task: dict[str, asyncio.Task[Any] | None] = {"task": None}
+
+    async def force_long_turn_answer(limit: float) -> None:
+        """Answer when VAD reports one uninterrupted caller turn for `limit` seconds.
+
+        Background noise or off-script chatter can keep VAD in "speaking" for 10+ seconds while the
+        transcript is complete, leaving the caller in silence. Committing the turn makes the agent reply
+        to what STT has heard so far.
+        """
+        await asyncio.sleep(limit)
+        if session.user_state != "speaking" or session.agent_state not in ("listening", "idle"):
+            return
+        logger.warning("Caller turn open for %.0fs; committing it so the agent can answer.", limit)
+        try:
+            await session.commit_user_turn()
+        except Exception:
+            logger.exception("Could not commit the long caller turn.")
+
     def handle_user_state_changed(ev: Any) -> None:
         new_state = str(getattr(ev, "new_state", "unknown"))
+        previous = long_turn_task["task"]
+        if previous is not None and not previous.done():
+            previous.cancel()
+        long_turn_task["task"] = None
+        limit = resolved_settings.conversation.max_user_speech_seconds
+        if new_state == "speaking" and limit > 0:
+            task = asyncio.create_task(force_long_turn_answer(limit))
+            background_tasks.add(task)
+            task.add_done_callback(background_tasks.discard)
+            long_turn_task["task"] = task
         if new_state == "away":
             spawn(handle_away())
         elif new_state == "speaking":
@@ -641,8 +683,12 @@ async def run_agent_session(
     # now, so this is the first and only opener; from here on it may answer the callee normally.
     first_msg = prompt_manager.get_first_message(call_request.dynamic_variables)
     logger.info("Speaking first message: '%s'", first_msg)
+    # Let the callee finish ("This call is being recorded. Hello?") before speaking, and make the
+    # opener uninterruptible: it is ~4 s long, and when an impatient "Hello?" was allowed to cancel it
+    # (and the replies generated for it) the callee heard nothing at all for 26 s.
+    await _wait_for_caller_quiet(session)
     agent.open_reply_gate()
-    speech_handle = session.say(first_msg, allow_interruptions=True)
+    speech_handle = session.say(first_msg, allow_interruptions=False)
     await speech_handle.wait_for_playout()
 
 

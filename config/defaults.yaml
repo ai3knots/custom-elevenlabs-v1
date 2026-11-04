@@ -55,7 +55,8 @@ conversation:
   silence_timeout_seconds: 15.0
   max_silence_count: 3
   hold_duration_seconds: 12.0
-  amd_timeout_seconds: 5.0 # hard cap on answering-machine detection, measured from pickup
+  amd_timeout_seconds: 3.0 # hard cap on answering-machine detection, measured from pickup
+  max_user_speech_seconds: 8.0 # force an answer when one uninterrupted caller turn runs this long (0 disables)
   interruption_min_words: 1
   interruption_ignore_terms:
     - "mmhmm"
