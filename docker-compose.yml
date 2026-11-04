@@ -1,31 +1,12 @@
+# Posivex voice agent stack.
+#
+# LiveKit (signaling, media and SIP) runs on LiveKit Cloud. Only the agent worker,
+# the API and Postgres run here. The agent makes outbound connections to LiveKit
+# Cloud, so no inbound SIP/RTP port forwarding is needed on this host.
+#
+# Required in .env: LIVEKIT_URL (wss://<project>.livekit.cloud), LIVEKIT_API_KEY,
+# LIVEKIT_API_SECRET, SIP_OUTBOUND_TRUNK_ID and the AI provider keys.
 services:
-  livekit-server:
-    image: livekit/livekit-server:latest
-    container_name: posivex_livekit
-    restart: unless-stopped
-    command: --config /etc/livekit.yaml
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  redis:
-    image: redis:7-alpine
-    container_name: posivex_redis
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   postgres:
     image: postgres:16-alpine
     container_name: posivex_postgres
@@ -52,12 +33,9 @@ services:
     env_file:
       - .env
     environment:
-      - LIVEKIT_URL=ws://livekit-server:7880
       - LIVEKIT_AGENT_NAME=posivex-agent
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-posivex}:${POSTGRES_PASSWORD:-posivex_secure_pass}@postgres:5432/${POSTGRES_DB:-posivex_calls}
     depends_on:
-      livekit-server:
-        condition: service_started
       postgres:
         condition: service_healthy
 
@@ -73,32 +51,11 @@ services:
     env_file:
       - .env
     environment:
-      - LIVEKIT_URL=ws://livekit-server:7880
       - LIVEKIT_AGENT_NAME=posivex-agent
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-posivex}:${POSTGRES_PASSWORD:-posivex_secure_pass}@postgres:5432/${POSTGRES_DB:-posivex_calls}
     depends_on:
       postgres:
         condition: service_healthy
-      livekit-server:
-        condition: service_started
-
-  sip:
-    image: livekit/sip:latest
-    container_name: posivex_sip
-    restart: unless-stopped
-    command: ["livekit-sip", "--config", "/etc/livekit/sip.yaml"]
-    volumes:
-      - ./sip.yaml:/etc/livekit/sip.yaml:ro
-    ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "10000-10100:10000-10100/udp"
-    depends_on:
-      redis:
-        condition: service_healthy
-      livekit-server:
-        condition: service_started
 
 volumes:
   postgres_data:
-  redis_data:

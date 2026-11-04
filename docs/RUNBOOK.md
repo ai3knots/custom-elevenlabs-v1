@@ -102,9 +102,9 @@ Copy `.env.example` to `.env` and configure credentials:
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 | `DATABASE_URL` | PostgreSQL AsyncPG connection string | `postgresql+asyncpg://posivex:posivex@localhost:5432/posivex_calls` |
 | `REDIS_URL` | Redis cache and queue connection string | `redis://localhost:6379/0` |
-| `LIVEKIT_URL` | LiveKit Server WebSockets URL | `wss://livekit.posivex.internal` |
-| `LIVEKIT_API_KEY` | LiveKit Admin API Key | `devkey` |
-| `LIVEKIT_API_SECRET` | LiveKit Admin API Secret | `secret` |
+| `LIVEKIT_URL` | LiveKit Cloud project WebSocket URL | `wss://<project>.livekit.cloud` |
+| `LIVEKIT_API_KEY` | LiveKit Cloud API key (Project Settings -> Keys) | `API...` |
+| `LIVEKIT_API_SECRET` | LiveKit Cloud API secret | `...` |
 | `GEMINI_API_KEY` | Google Gemini API Key | `AIzaSy...` |
 | `DEEPGRAM_API_KEY` | Deepgram API Key | `token...` |
 | `ELEVENLABS_API_KEY` | ElevenLabs API Key | `xi-...` |
@@ -113,6 +113,21 @@ Copy `.env.example` to `.env` and configure credentials:
 | `TELEPHONY__PROVIDER` | Provider mode (`livekit_sip`, `mock`, `console`) | `livekit_sip` |
 | `TELEPHONY__SIP_TRUNK_ID` | Default outbound SIP Trunk ID | `ST_xxxxxxxxx` |
 | `TELEPHONY__MAX_CONCURRENT_CALLS` | Global concurrency ceiling | `50` |
+
+### 3.1 LiveKit Cloud SIP Setup
+
+Signaling, media and SIP are hosted by LiveKit Cloud. The agent worker only makes outbound connections to Cloud, so the host needs no inbound SIP/RTP port forwarding. No `livekit-server` or `livekit/sip` containers are run.
+
+1. Create a project at https://cloud.livekit.io and copy its URL, API key and secret into `.env` (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`).
+2. Create the Telnyx outbound trunk on that project (once):
+   ```bash
+   uv run python scripts/setup_telnyx_trunk.py --phone "+1XXXXXXXXXX" --sip-user "<telnyx user>" --sip-pass "<telnyx pass>"
+   ```
+   Put the printed trunk ID in `.env` as `SIP_OUTBOUND_TRUNK_ID` and set `TELEPHONY_PROVIDER=livekit_sip`.
+3. Start the stack: `docker compose up -d --build`. The agent registers with Cloud as `posivex-agent`.
+4. Telnyx authenticates the trunk by username and password. If the Telnyx SIP connection is restricted by IP, allow LiveKit Cloud's static ranges (Static IPs docs) or `0.0.0.0/0`.
+
+The older self-hosted SIP debugging notes are in `docs/SIP_NETWORK_DEBUG_GUIDE.md` (historical).
 
 ---
 

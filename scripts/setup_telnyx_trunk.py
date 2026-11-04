@@ -56,15 +56,18 @@ def parse_args() -> argparse.Namespace:
 
 
 async def register_trunk(args: argparse.Namespace) -> None:
-    livekit_url = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
+    livekit_url = os.getenv("LIVEKIT_URL", "")
     api_key = os.getenv("LIVEKIT_API_KEY", "")
     api_secret = os.getenv("LIVEKIT_API_SECRET", "")
 
-    if not api_key or not api_secret:
-        print("❌ Error: LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set in your .env")
+    if not livekit_url or not api_key or not api_secret:
+        print(
+            "❌ Error: LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set "
+            "in your .env (use your LiveKit Cloud project values)"
+        )
         sys.exit(1)
 
-    print(f"\n📡 Connecting to LiveKit Server at: {livekit_url}")
+    print(f"\n📡 Connecting to LiveKit at: {livekit_url}")
     print(f"📞 Registering Telnyx Outbound Trunk: {args.name}")
     print(f"   • Phone Number: {args.phone}")
     print(f"   • Gateway Host: {args.sip_host}")
@@ -78,6 +81,12 @@ async def register_trunk(args: argparse.Namespace) -> None:
         numbers=[args.phone],
         auth_username=args.sip_user,
         auth_password=args.sip_pass,
+        # Telnyx docs: send the username in the first INVITE so Telnyx always
+        # answers with a 407 challenge instead of matching a connection by source IP.
+        # `headers` adds it to the INVITE; `headers_to_attributes` is the field the
+        # LiveKit Telnyx guide names. Setting both is harmless.
+        headers={"X-Telnyx-Username": args.sip_user},
+        headers_to_attributes={"X-Telnyx-Username": args.sip_user},
     )
 
     request = api.CreateSIPOutboundTrunkRequest(trunk=trunk_info)
