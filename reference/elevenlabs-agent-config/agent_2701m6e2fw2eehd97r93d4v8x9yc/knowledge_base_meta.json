@@ -1,0 +1,31 @@
+{
+ "id": "VdUvsBylkbsLpMyUIkXP",
+ "name": "Knowledge-base.md",
+ "metadata": {
+  "created_at_unix_secs": 1793811324,
+  "last_updated_at_unix_secs": 1793811324,
+  "size_bytes": 11424
+ },
+ "supported_usages": [
+  "prompt",
+  "auto"
+ ],
+ "access_info": {
+  "is_creator": true,
+  "creator_name": "Developer 3knot",
+  "creator_email": "developer.3knots@gmail.com",
+  "role": "admin",
+  "anonymous_access_level_override": null,
+  "access_source": null
+ },
+ "folder_parent_id": null,
+ "chunking_override": null,
+ "folder_path": [],
+ "type": "file",
+ "content_format": "markdown",
+ "filename": "Knowledge-base.md",
+ "external_sync_info": null,
+ "auto_sync_info": null,
+ "refresh_status": null,
+ "is_frozen": false
+}
