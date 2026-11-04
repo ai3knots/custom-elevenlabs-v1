@@ -96,3 +96,19 @@ Reference agent: ElevenLabs `agent_2701m6e2fw2eehd97r93d4v8x9yc` ("Posivex - 6 -
 6. "Hold on" then silence for 20 s: agent stays quiet, then continues.
 7. Prolonged silence after the opener: call ends after 15 s, outcome `no_answer` or `other`.
 8. "I'm busy, call me Saturday at 6": callback locked in, outcome `callback_set`.
+
+## 9. Implementation status (2026-11-05)
+
+Steps 1 to 10 are done on `feat/single-prompt-agent`. Step 11 (live calls) is pending.
+
+Verified offline (93 tests, `ruff` clean):
+- The outcome classifier on the 6 recorded calls in `recent-calls/` returns plausible outcomes (callback, owner details captured, automated menu, other).
+- Text-mode scenarios on Gemini 3.5 Flash with the real prompt: the five beats, the callback lock-in, the employee four-detail flow,
+  `skip_turn` on "hold on", the do-not-call apology plus `end_call`, and `voicemail_detection` all behave as intended.
+
+Found during those scenarios and handled:
+- Gemini often speaks the closing line but does not call `end_call` (4 of 4 closings). A goodbye detector now ends the call 2.5 s after the
+  line (`CLOSING_GRACE_SECS`), cancelled if the caller speaks. Worth watching in live calls.
+- Once the model said "this six-seven-eight area code number" when confirming the callback number, a detail it was never given.
+  The prompt says to confirm "the number I called"; watch for invented details in transcripts.
+- Silence events are ignored until the opener has been spoken, so ringing time cannot end the call.
