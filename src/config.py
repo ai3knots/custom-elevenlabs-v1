@@ -77,7 +77,9 @@ class VADConfig(BaseModel):
 class TurnDetectorConfig(BaseModel):
     """Turn detection mode configuration."""
 
-    mode: Literal["vad", "stt-only", "multimodal", "eou"] = "vad"
+    # "v1" / "v1-mini" use LiveKit's audio turn detector (v1 via LiveKit Inference,
+    # falling back to the local v1-mini on errors or when the plan allowance runs out).
+    mode: Literal["vad", "stt-only", "v1", "v1-mini", "multimodal", "eou"] = "vad"
 
 
 class ConversationConfig(BaseModel):
@@ -307,6 +309,11 @@ def load_settings(
     webhook_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
     if webhook_secret:
         merged.setdefault("webhook", {})["webhook_secret"] = webhook_secret
+
+    # Turn detection mode from env (vad | stt-only | v1 | v1-mini)
+    turn_mode = os.getenv("TURN_DETECTOR_MODE")
+    if turn_mode:
+        merged.setdefault("turn_detector", {})["mode"] = turn_mode
 
     # Telephony configuration from env
     telephony_provider = os.getenv("TELEPHONY_PROVIDER")

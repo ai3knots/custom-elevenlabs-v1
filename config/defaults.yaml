@@ -45,7 +45,9 @@ vad:
   prefix_padding_duration: 0.5
 
 turn_detector:
-  mode: "vad" # "vad" | "stt-only"; multimodal/eou are not available and fall back to vad
+  # "vad" | "stt-only" | "v1" | "v1-mini"; multimodal/eou are not available and fall back to vad.
+  # Can be overridden without a rebuild via the TURN_DETECTOR_MODE env var.
+  mode: "vad"
 
 conversation:
   max_duration_seconds: 900

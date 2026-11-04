@@ -71,6 +71,30 @@ def test_build_turn_handling_maps_settings():
     assert build_turn_handling(settings, STATE_REGISTRY[State.OPENER])["turn_detection"] == "vad"
 
 
+def test_build_turn_handling_audio_turn_detector(monkeypatch):
+    from livekit.agents import inference
+
+    monkeypatch.setenv("LIVEKIT_URL", "wss://example.livekit.cloud")
+    monkeypatch.setenv("LIVEKIT_API_KEY", "key")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", "secret")
+
+    settings = Settings()
+    for mode in ("v1", "v1-mini"):
+        settings.turn_detector.mode = mode
+        th = build_turn_handling(settings, STATE_REGISTRY[State.OPENER])
+        assert isinstance(th["turn_detection"], inference.TurnDetector)
+        # Endpointing and interruption settings are unchanged by the detector choice.
+        assert th["endpointing"] == {"min_delay": 0.3, "max_delay": 2.0}
+        assert th["interruption"] == {"min_words": 1}
+
+
+def test_turn_detector_mode_env_override(monkeypatch):
+    from src.config import load_settings
+
+    monkeypatch.setenv("TURN_DETECTOR_MODE", "v1")
+    assert load_settings().turn_detector.mode == "v1"
+
+
 def test_tts_defaults_are_consistent():
     """config.py default and defaults.yaml must name the same TTS model."""
     from src.config import TTSConfig, load_settings

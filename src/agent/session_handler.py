@@ -18,6 +18,7 @@ from livekit.agents import (
     AgentSession,
     JobContext,
     TurnHandlingOptions,
+    inference,
     room_io,
 )
 from livekit.agents.metrics.usage import LLMModelUsage, STTModelUsage, TTSModelUsage
@@ -140,6 +141,11 @@ def build_turn_handling(settings: Settings, meta: StateMetadata) -> TurnHandling
         turn_handling["turn_detection"] = "vad"
     elif mode == "stt-only":
         turn_handling["turn_detection"] = "stt"
+    elif mode in ("v1", "v1-mini"):
+        # Audio turn detector (reads the caller's audio). VAD is still used for speech
+        # start/stop and interruptions. "v1" falls back to the local "v1-mini" on errors
+        # or when the LiveKit Inference allowance is exhausted.
+        turn_handling["turn_detection"] = inference.TurnDetector(version=mode)
     else:
         logger.warning("Turn detector mode '%s' is not available; using VAD.", mode)
         turn_handling["turn_detection"] = "vad"
