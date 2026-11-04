@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import AsyncIterable, Callable, Coroutine, Iterable
 from typing import Any
 
 from livekit import rtc
-from livekit.agents import Agent, ModelSettings, RunContext, stt
-from livekit.agents.llm import LLM, ToolError, function_tool
+from livekit.agents import Agent, ModelSettings, RunContext, StopResponse, stt
+from livekit.agents import llm as lk_llm
+from livekit.agents.llm import LLM, ToolError, ToolResult, function_tool
 
 from src.agent.interruption import build_ignore_keys, drop_backchannel_transcripts
 from src.config import DynamicVariables
@@ -22,6 +24,18 @@ from src.prompts.manager import PromptManager
 logger = logging.getLogger("posivex.agent")
 
 CLOSING_LINE_TIMEOUT_SECS = 20.0
+
+# Phrases that really do indicate a voicemail greeting or phone menu. A recording notice such as
+# "this call is being recorded" is deliberately NOT here.
+MACHINE_CUES = re.compile(
+    r"leave (?:a|your) (?:\w+ )?message|after the (?:tone|beep)|at the (?:tone|beep)|voice ?mail|mailbox"
+    r"|press (?:\d|one|two|three|star|pound)|you(?:'ve| have) reached|(?:is|isn't|is not) available"
+    r"|unable to take your call|can't (?:come|take)|record your message|not accepting calls",
+    re.IGNORECASE,
+)
+
+TERMINAL_STATES = frozenset({State.END, State.DNC_CLOSE})
+MACHINE_OUTCOMES = frozenset({"voicemail", "automated_menu"})
 
 EventHandler = Callable[[str, dict[str, Any]], None] | Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]
 
@@ -39,9 +53,18 @@ class PersonaAgent(Agent):
         call_id: str | None = None,
         event_handler: EventHandler | None = None,
         ignore_terms: Iterable[str] = (),
+        hold_replies: bool = False,
+        on_gated_turn: Callable[[str], None] | None = None,
     ) -> None:
         self.fsm = fsm
         self._ignore_keys = build_ignore_keys(ignore_terms)
+        # While True the LLM does not answer the callee, so the scripted opener is the first and
+        # only thing spoken after pickup (answering-machine detection runs during this time).
+        self._hold_replies = hold_replies
+        self._on_gated_turn = on_gated_turn
+        # Verdict of answering-machine detection ("human", "machine-vm", "uncertain", ...).
+        self.amd_category: str | None = None
+        self._recent_user_text: list[str] = []
         self.prompt_manager = prompt_manager
         self.variables = variables
         self.llm_primary = llm_primary
@@ -116,8 +139,57 @@ class PersonaAgent(Agent):
         except Exception as e:
             logger.error("Error in event handler: %s", e, exc_info=True)
 
+    def open_reply_gate(self) -> None:
+        """Let the LLM answer the callee again (called right before the opening line is spoken)."""
+        self._hold_replies = False
+
+    async def on_user_turn_completed(self, turn_ctx: lk_llm.ChatContext, new_message: lk_llm.ChatMessage) -> None:
+        """Remember what the callee said and, while replies are held, swallow the turn.
+
+        Held turns are still added to the conversation history and the stored transcript, but the
+        LLM does not answer them. Otherwise it would write its own opener while answering-machine
+        detection is running, and that opener would play together with the scripted one.
+        """
+        text = (new_message.text_content or "").strip()
+        if text:
+            self._recent_user_text = (self._recent_user_text + [text])[-3:]
+        if not self._hold_replies:
+            return
+        if text:
+            logger.info("Holding reply until the opening line has played (callee said: %r)", text)
+            try:
+                chat_ctx = self.chat_ctx.copy()
+                chat_ctx.add_message(role="user", content=text)
+                await self.update_chat_ctx(chat_ctx)
+            except Exception:
+                logger.exception("Could not add the held turn to the chat context.")
+            if self._on_gated_turn is not None:
+                try:
+                    self._on_gated_turn(text)
+                except Exception:
+                    logger.exception("Held-turn handler failed.")
+        raise StopResponse()
+
+    def _machine_claim_unsupported(self) -> bool:
+        """True when the LLM tries to treat the callee as a machine against the AMD verdict.
+
+        Answering-machine detection is the single source of truth for who answered. If it said
+        "human" and nothing the callee said sounds like a voicemail or menu, the LLM may not end
+        the opener on its own (a recording notice alone is not a machine).
+        """
+        if self.amd_category != "human" or self.fsm.current_state != State.OPENER:
+            return False
+        return not MACHINE_CUES.search(" ".join(self._recent_user_text))
+
+    def _reject_unsupported_machine_claim(self) -> ToolError:
+        return ToolError(
+            "A live person was confirmed on the line, and nothing they said is a voicemail greeting or "
+            "phone menu. A notice such as 'this call is being recorded' is not a machine. Do not end the "
+            "call. Answer them naturally and ask the owner / point-of-sale role question."
+        )
+
     @function_tool
-    async def transition(self, to: str, reason: str = "", context: RunContext = None) -> str:  # type: ignore[assignment]
+    async def transition(self, to: str, reason: str = "", context: RunContext = None) -> str | ToolResult:  # type: ignore[assignment]
         """Request a transition to another state in the sales conversation.
 
         Args:
@@ -126,13 +198,43 @@ class PersonaAgent(Agent):
         """
         logger.info("Agent requesting transition to '%s' (reason: %s)", to, reason)
         try:
-            new_state = await self.fsm.transition(to, reason=reason)
+            target = self.fsm.validate_transition(to, reason=reason)
         except FSMError as e:
             allowed = ", ".join(sorted(s.value for s in self.fsm.metadata.allowed_transitions))
             raise ToolError(
                 f"{e}. From '{self.fsm.current_state.value}' you may only move to: {allowed or 'nowhere'}."
             ) from e
-        await self._apply_state(new_state, context)
+
+        if target == State.END and self._machine_claim_unsupported():
+            logger.warning("Refusing LLM request to end the opener as a machine; AMD said human.")
+            raise self._reject_unsupported_machine_claim()
+
+        # Build the new prompt BEFORE committing the state change, so a failure leaves the FSM and
+        # the agent's instructions consistent with each other.
+        prepared_prompt: str | None = None
+        if target not in TERMINAL_STATES:
+            try:
+                prepared_prompt = self.prompt_manager.render_prompt(target, self.variables)
+            except Exception as e:
+                logger.exception("Could not build the prompt for state '%s'; staying in '%s'.",
+                                 target.value, self.fsm.current_state.value)
+                raise ToolError(
+                    "That step is temporarily unavailable. Stay in the current step and keep the "
+                    "conversation going."
+                ) from e
+
+        new_state = await self.fsm.transition(target, reason=reason)
+        try:
+            await self._apply_state(new_state, context, prepared_prompt)
+        except Exception as e:
+            if new_state in TERMINAL_STATES:
+                raise
+            logger.exception("Applying state '%s' failed; rolling back.", new_state.value)
+            self.fsm.revert_last_transition()
+            raise ToolError(
+                "That step is temporarily unavailable. Stay in the current step and keep the "
+                "conversation going."
+            ) from e
         await self._emit_event(
             "state_transition",
             {
@@ -142,10 +244,15 @@ class PersonaAgent(Agent):
                 "call_id": self.call_id,
             },
         )
-        return f"Successfully transitioned to state: {new_state.value}"
+        message = f"Successfully transitioned to state: {new_state.value}"
+        if new_state in TERMINAL_STATES:
+            # The call is ending: do not ask the LLM for a follow-up reply. An empty reply here used
+            # to trigger ~10 s of failing retries while the callee heard nothing.
+            return ToolResult(message, reply_required=False)
+        return message
 
     @function_tool
-    async def set_call_outcome(self, outcome: str, rationale: str = "") -> str:
+    async def set_call_outcome(self, outcome: str, rationale: str = "") -> str | ToolResult:
         """Record how this call ended. Call it once the result is known, in the same turn as the final transition.
 
         Args:
@@ -158,13 +265,18 @@ class PersonaAgent(Agent):
         valid = [o.value for o in CallOutcome]
         if value not in valid:
             raise ToolError(f"Unknown outcome '{outcome}'. Use one of: {', '.join(valid)}.")
+        if value in MACHINE_OUTCOMES and self._machine_claim_unsupported():
+            logger.warning("Refusing LLM outcome '%s' in the opener; AMD said human.", value)
+            raise self._reject_unsupported_machine_claim()
         self.fsm.set_outcome(value, rationale=rationale)
         logger.info("Agent recorded call outcome '%s' (%s)", value, rationale)
         await self._emit_event(
             "outcome_recorded",
             {"outcome": value, "reason": rationale, "call_id": self.call_id},
         )
-        return f"Outcome recorded: {value}"
+        # Recording an outcome never needs a spoken reply of its own. A transition made in the same
+        # turn decides whether the agent speaks next (e.g. the closing line after 'close').
+        return ToolResult(f"Outcome recorded: {value}", reply_required=False)
 
     @function_tool
     async def skip_turn(self, reason: str = "Merchant requested hold") -> None:
@@ -185,7 +297,12 @@ class PersonaAgent(Agent):
         # Returning None completes the tool without a follow-up reply, so the agent stays quiet.
         return None
 
-    async def _apply_state(self, new_state: State, context: RunContext | None = None) -> None:
+    async def _apply_state(
+        self,
+        new_state: State,
+        context: RunContext | None = None,
+        prepared_prompt: str | None = None,
+    ) -> None:
         """Update instructions, models, and turn settings to match the new state."""
         meta: StateMetadata = self.fsm.get_metadata(new_state)
 
@@ -223,7 +340,11 @@ class PersonaAgent(Agent):
             return
 
         # 3. Conversational state update
-        new_prompt = self.prompt_manager.render_prompt(new_state, self.variables)
+        new_prompt = (
+            prepared_prompt
+            if prepared_prompt is not None
+            else self.prompt_manager.render_prompt(new_state, self.variables)
+        )
         await self.update_instructions(new_prompt)
 
         # Dynamically switch LLM: CONVERSATION uses gemini-3.5-flash, others use flash-lite

@@ -230,3 +230,159 @@ async def test_end_transition_waits_for_closing_line_before_shutdown(agent_fixtu
     await agent.transition("end", reason="closing line delivered", context=context)
 
     assert order == ["playout", "shutdown"]
+
+
+# --------------------------------------------------------------------------------------------------
+# Call-analysis fixes (knowledge base, atomic transitions, AMD as single source, no empty replies)
+# --------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_transition_is_atomic_when_prompt_rendering_fails(agent_fixture):
+    """A prompt that cannot be built must leave the FSM and the agent's instructions untouched."""
+    from livekit.agents.llm import ToolError
+
+    agent, fsm, prompt_manager = agent_fixture
+    before = agent.instructions
+    prompt_manager.render_prompt = MagicMock(side_effect=RuntimeError("template broke"))
+
+    with pytest.raises(ToolError, match="temporarily unavailable"):
+        await agent.transition("conversation", reason="Owner on the phone")
+
+    assert fsm.current_state == State.OPENER
+    assert agent.instructions == before
+    # The same transition can be retried later instead of failing with 'conversation -> conversation'.
+    prompt_manager.render_prompt = MagicMock(return_value="# retry prompt")
+    await agent.transition("conversation", reason="Owner on the phone")
+    assert fsm.current_state == State.CONVERSATION
+
+
+@pytest.mark.asyncio
+async def test_transition_rolls_back_when_applying_state_fails(agent_fixture):
+    from livekit.agents.llm import ToolError
+
+    agent, fsm, _ = agent_fixture
+    agent.update_instructions = AsyncMock(side_effect=RuntimeError("update failed"))
+
+    with pytest.raises(ToolError):
+        await agent.transition("reach_owner", reason="Employee answered")
+
+    assert fsm.current_state == State.OPENER
+    assert fsm.previous_state is None
+    assert fsm.history == []
+
+
+@pytest.mark.asyncio
+async def test_missing_knowledge_base_does_not_break_the_conversation_state(agent_fixture):
+    from src.config import KBConfig
+
+    agent, fsm, prompt_manager = agent_fixture
+    prompt_manager.kb_provider.config = KBConfig(mode="inline", file_path="does/not/exist.md")
+    prompt_manager.kb_provider._cached_content = None
+
+    reply = await agent.transition("conversation", reason="Owner on the phone")
+    assert "Successfully transitioned" in reply
+    assert fsm.current_state == State.CONVERSATION
+    assert "# Knowledge Base" not in agent.instructions
+
+
+@pytest.mark.asyncio
+async def test_ending_the_call_does_not_request_a_follow_up_reply(agent_fixture):
+    """transition(end/dnc_close) and set_call_outcome must not trigger an (empty) LLM reply."""
+    from livekit.agents.llm import ToolResult
+
+    agent, fsm, _ = agent_fixture
+    agent.attach_test_session(MagicMock())
+
+    outcome = await agent.set_call_outcome("declined", rationale="Not interested")
+    assert isinstance(outcome, ToolResult) and outcome.reply_required is False
+
+    ended = await agent.transition("end", reason="done")
+    assert isinstance(ended, ToolResult) and ended.reply_required is False
+    assert fsm.is_terminal
+
+
+@pytest.mark.asyncio
+async def test_non_terminal_transition_still_requests_a_reply(agent_fixture):
+    agent, _, _ = agent_fixture
+    reply = await agent.transition("reach_owner", reason="Employee answered")
+    assert isinstance(reply, str)
+
+
+@pytest.mark.asyncio
+async def test_amd_human_blocks_llm_from_ending_opener_on_recording_notice(agent_fixture):
+    """AMD said 'human': a recording notice alone must not let the LLM end the call as a machine."""
+    from livekit.agents.llm import ToolError
+
+    agent, fsm, _ = agent_fixture
+    agent.amd_category = "human"
+    agent._recent_user_text = ["Hello? This call is being recorded."]
+
+    with pytest.raises(ToolError, match="live person"):
+        await agent.set_call_outcome("automated_menu", rationale="recording notice")
+    with pytest.raises(ToolError, match="live person"):
+        await agent.transition("end", reason="voicemail")
+    assert fsm.call_outcome is None
+    assert fsm.current_state == State.OPENER
+
+
+@pytest.mark.asyncio
+async def test_amd_guard_allows_real_voicemail_cues_and_uncertain_verdicts(agent_fixture):
+    agent, fsm, _ = agent_fixture
+    agent.attach_test_session(MagicMock())
+
+    # AMD said human, but the callee then plays an unmistakable voicemail greeting.
+    agent.amd_category = "human"
+    agent._recent_user_text = ["Hi you've reached Tony. Please leave a message after the tone."]
+    await agent.set_call_outcome("voicemail", rationale="voicemail: leave a message")
+    assert fsm.call_outcome == "voicemail"
+
+    # AMD uncertain: the LLM keeps its judgement.
+    agent.amd_category = "uncertain"
+    agent._recent_user_text = ["This call is being recorded."]
+    await agent.set_call_outcome("automated_menu", rationale="screener")
+    assert fsm.call_outcome == "automated_menu"
+
+
+@pytest.mark.asyncio
+async def test_replies_are_held_until_the_opening_line_then_released():
+    from livekit.agents import StopResponse
+    from livekit.agents.llm import ChatContext, ChatMessage
+
+    held: list[str] = []
+    agent = PersonaAgent(
+        fsm=ConversationFSM(),
+        prompt_manager=PromptManager(persona="amelia", language="en"),
+        variables=DynamicVariables(),
+        llm_primary=MockLLM(),
+        llm_conversation=MockLLM(),
+        hold_replies=True,
+        on_gated_turn=held.append,
+    )
+
+    message = ChatMessage(role="user", content=["This call is being recorded."])
+    with pytest.raises(StopResponse):
+        await agent.on_user_turn_completed(ChatContext(), message)
+    assert held == ["This call is being recorded."]
+
+    agent.open_reply_gate()
+    await agent.on_user_turn_completed(ChatContext(), ChatMessage(role="user", content=["Hello?"]))
+    assert held == ["This call is being recorded."]  # not held any more
+    assert agent._recent_user_text[-1] == "Hello?"
+
+
+def test_prewarmed_vad_is_reused_only_when_settings_match():
+    from types import SimpleNamespace
+
+    from src.agent.session_handler import _prewarmed_vad
+    from src.config import Settings
+
+    settings = Settings()
+    sentinel = object()
+    ctx = SimpleNamespace(proc=SimpleNamespace(userdata={"vad": (settings.vad.model_dump(), sentinel)}))
+    assert _prewarmed_vad(ctx, settings) is sentinel
+
+    changed = Settings()
+    changed.vad.min_silence_duration = 0.9
+    assert _prewarmed_vad(ctx, changed) is None
+    assert _prewarmed_vad(SimpleNamespace(proc=SimpleNamespace(userdata={})), settings) is None

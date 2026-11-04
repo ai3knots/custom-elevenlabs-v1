@@ -200,7 +200,7 @@ The agent auto-detects language (via ElevenLabs' built-in language detection) an
 
 ### 1.10 Knowledge Base
 
-- **File:** `Knowledge-base.md` (129 lines, ~7.5 KB) — [`Knowledge-base.md`](reference/elevenlabs-agent-config/agent-v5-Amelia/Knowledge-base.md)
+- **File:** `Knowledge-base.md` (129 lines, ~7.5 KB) — [`Knowledge-base.md`](prompts/knowledge/Knowledge-base.md)
 - **RAG config:** `e5_mistral_7b_instruct` embeddings, `optional_rag_enabled: false` (always retrieves), `max_vector_distance: 0.6`, `max_retrieved_rag_chunks_count: 20`, `max_documents_length: 50000`
 - **Usage mode:** `auto` (LLM decides when to query)
 - **Strategies:** `cat` (concatenation), `keyword`, `semantic`, `ls` (listing)

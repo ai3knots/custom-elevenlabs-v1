@@ -37,6 +37,8 @@ class ConversationFSM:
 
         self._call_outcome: str | None = None
         self._outcome_rationale: str | None = None
+        # Snapshot taken before the latest transition so it can be rolled back.
+        self._rollback: tuple[State, State | None, int, str | None, str | None] | None = None
 
     @property
     def current_state(self) -> State:
@@ -109,6 +111,32 @@ class ConversationFSM:
         allowed = self.metadata.allowed_transitions
         return target in allowed
 
+    def validate_transition(self, to_state: State | str, reason: str = "") -> State:
+        """Check that a transition is permitted without performing it.
+
+        Raises:
+            IllegalTransitionError: If the transition violates the transition matrix.
+            InvalidStateError: If the target state name is unrecognized.
+        """
+        target = self._coerce_state(to_state)
+        if not self.can_transition(target):
+            raise IllegalTransitionError(self._current_state, target, reason=reason)
+        return target
+
+    def revert_last_transition(self) -> None:
+        """Undo the most recent transition (used when applying the new state fails)."""
+        if self._rollback is None or not self._history:
+            return
+        state, previous, silence, outcome, rationale = self._rollback
+        self._history.pop()
+        self._current_state = state
+        self._previous_state = previous
+        self._silence_count = silence
+        self._call_outcome = outcome
+        self._outcome_rationale = rationale
+        self._rollback = None
+        logger.warning("FSM transition rolled back to %s", state.value)
+
     async def transition(self, to_state: State | str, reason: str = "") -> State:
         """Execute a validated transition to the target state.
 
@@ -116,12 +144,16 @@ class ConversationFSM:
             IllegalTransitionError: If the transition violates the transition matrix.
             InvalidStateError: If the target state name is unrecognized.
         """
-        target = self._coerce_state(to_state)
-
-        if not self.can_transition(target):
-            raise IllegalTransitionError(self._current_state, target, reason=reason)
+        target = self.validate_transition(to_state, reason=reason)
 
         from_state = self._current_state
+        self._rollback = (
+            from_state,
+            self._previous_state,
+            self._silence_count,
+            self._call_outcome,
+            self._outcome_rationale,
+        )
         self._previous_state = from_state
         self._current_state = target
         self._silence_count = 0  # Reset silence counter on active transition

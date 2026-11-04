@@ -117,3 +117,21 @@ def test_routing_states_use_flash_not_flash_lite():
         assert STATE_REGISTRY[state].default_model == "gemini-3.5-flash"
     settings = load_settings()
     assert settings.llm.default_model == settings.llm.conversation_model == "gemini-3.5-flash"
+
+
+def test_fallback_llm_differs_from_primary_models():
+    from src.config import LLMConfig
+
+    cfg = LLMConfig()
+    assert cfg.fallback_model not in (cfg.default_model, cfg.conversation_model)
+
+
+def test_amd_timeout_default_and_llm_env_overrides(monkeypatch):
+    from src.config import load_settings
+
+    assert load_settings().conversation.amd_timeout_seconds == 5.0
+    monkeypatch.setenv("LLM_DEFAULT_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setenv("LLM_FALLBACK_MODEL", "gemini-3.5-flash")
+    settings = load_settings()
+    assert settings.llm.default_model == "gemini-3.5-flash-lite"
+    assert settings.llm.fallback_model == "gemini-3.5-flash"

@@ -255,3 +255,22 @@ def test_state_registry_completeness():
         for target in meta.allowed_transitions:
             assert isinstance(target, State)
             assert target in STATE_REGISTRY
+
+
+@pytest.mark.asyncio
+async def test_validate_and_revert_transition():
+    fsm = ConversationFSM()
+    assert fsm.validate_transition("conversation") == State.CONVERSATION
+    assert fsm.current_state == State.OPENER  # validation never changes state
+
+    with pytest.raises(IllegalTransitionError):
+        fsm.validate_transition("lock_in")
+
+    await fsm.transition("reach_owner", reason="employee")
+    await fsm.transition("conversation", reason="owner came to the phone")
+    fsm.revert_last_transition()
+    assert fsm.current_state == State.REACH_OWNER
+    assert fsm.previous_state == State.OPENER
+    assert len(fsm.history) == 1
+    fsm.revert_last_transition()  # nothing left to roll back for this snapshot
+    assert fsm.current_state == State.REACH_OWNER

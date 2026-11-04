@@ -23,7 +23,8 @@ llm:
   provider: "google"
   default_model: "gemini-3.5-flash"
   conversation_model: "gemini-3.5-flash"
-  fallback_model: "gemini-3.5-flash"
+  fallback_model: "gemini-3.5-flash-lite" # must differ from the primary models
+  # For lower latency, try gemini-3.5-flash-lite as default_model (env: LLM_DEFAULT_MODEL).
   temperature: 0.0
   thinking_level: "minimal"
   cascade_timeout: 10.0
@@ -54,6 +55,7 @@ conversation:
   silence_timeout_seconds: 15.0
   max_silence_count: 3
   hold_duration_seconds: 12.0
+  amd_timeout_seconds: 5.0 # hard cap on answering-machine detection, measured from pickup
   interruption_min_words: 1
   interruption_ignore_terms:
     - "mmhmm"
@@ -82,7 +84,7 @@ conversation:
 
 kb:
   mode: "inline"
-  file_path: "reference/elevenlabs-agent-config/agent-v5-Amelia/Knowledge-base.md"
+  file_path: "prompts/knowledge/Knowledge-base.md"
   max_token_budget: 4000
 
 webhook:

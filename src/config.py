@@ -46,7 +46,8 @@ class LLMConfig(BaseModel):
     provider: Literal["google", "mock"] = "google"
     default_model: str = "gemini-3.5-flash"
     conversation_model: str = "gemini-3.5-flash"
-    fallback_model: str = "gemini-3.5-flash"
+    # Must differ from the primary models, otherwise the fallback adds retries without resilience.
+    fallback_model: str = "gemini-3.5-flash-lite"
     temperature: float = 0.0
     thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
     cascade_timeout: float = 10.0
@@ -93,6 +94,10 @@ class ConversationConfig(BaseModel):
     ring_timeout_seconds: float = 75.0
     interruption_min_words: int = 1
     amd_no_speech_seconds: float = 6.0
+    # Hard cap on answering-machine detection, measured from pickup. When it expires without a
+    # verdict the callee is treated as a person and greeted, so a recording notice followed by
+    # "Hello?" no longer leaves 10+ seconds of silence.
+    amd_timeout_seconds: float = 5.0
     interruption_ignore_terms: list[str] = Field(
         default_factory=lambda: [
             "mmhmm",
@@ -126,7 +131,7 @@ class KBConfig(BaseModel):
     """Knowledge base configuration settings."""
 
     mode: Literal["inline", "rag", "off"] = "inline"
-    file_path: str = "reference/elevenlabs-agent-config/agent-v5-Amelia/Knowledge-base.md"
+    file_path: str = "prompts/knowledge/Knowledge-base.md"
     max_token_budget: int = 4000
 
 
@@ -309,6 +314,16 @@ def load_settings(
     webhook_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
     if webhook_secret:
         merged.setdefault("webhook", {})["webhook_secret"] = webhook_secret
+
+    # LLM model overrides from env, so latency experiments need no rebuild
+    for env_var, field_name in (
+        ("LLM_DEFAULT_MODEL", "default_model"),
+        ("LLM_CONVERSATION_MODEL", "conversation_model"),
+        ("LLM_FALLBACK_MODEL", "fallback_model"),
+    ):
+        model_override = os.getenv(env_var)
+        if model_override:
+            merged.setdefault("llm", {})[field_name] = model_override
 
     # Turn detection mode from env (vad | stt-only | v1 | v1-mini)
     turn_mode = os.getenv("TURN_DETECTOR_MODE")

@@ -47,7 +47,11 @@ class KnowledgeBaseProvider:
                 kb_path = self.base_dir / kb_path
 
             if not kb_path.exists():
-                raise FileNotFoundError(f"Knowledge base file not found at: {kb_path}")
+                # A missing file must never take down a live call: run without the knowledge base.
+                logger.error(
+                    "Knowledge base file not found at %s; continuing without a knowledge base.", kb_path
+                )
+                return ""
 
             with open(kb_path, encoding="utf-8") as f:
                 content = f.read()

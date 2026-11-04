@@ -101,7 +101,7 @@ def test_knowledge_base_inline_token_budget():
     """Verify KnowledgeBaseProvider loads inline KB and enforces token budget."""
     cfg = KBConfig(
         mode="inline",
-        file_path="reference/elevenlabs-agent-config/agent-v5-Amelia/Knowledge-base.md",
+        file_path="prompts/knowledge/Knowledge-base.md",
         max_token_budget=4000,
     )
     provider = KnowledgeBaseProvider(cfg)
@@ -117,7 +117,7 @@ def test_knowledge_base_token_budget_exceeded():
     """Verify ValueError is raised if the KB exceeds configured max_token_budget."""
     cfg = KBConfig(
         mode="inline",
-        file_path="reference/elevenlabs-agent-config/agent-v5-Amelia/Knowledge-base.md",
+        file_path="prompts/knowledge/Knowledge-base.md",
         max_token_budget=100,  # Intentionally tiny budget
     )
     provider = KnowledgeBaseProvider(cfg)
@@ -162,3 +162,35 @@ def test_node_prompts_use_tools_not_elevenlabs_workflow(sample_variables: Dynami
     assert 'transition("end"' in opener
     assert "A business greeting is not an answer" in opener
     assert "Michael" in PromptManager(persona="michael").render_prompt(State.OPENER, sample_variables)
+
+
+def test_missing_knowledge_base_file_degrades_to_empty():
+    cfg = KBConfig(mode="inline", file_path="does/not/exist.md")
+    assert KnowledgeBaseProvider(cfg).load_kb() == ""
+
+
+def test_default_knowledge_base_ships_in_a_docker_copied_path():
+    """The KB must live outside reference/ (excluded by .dockerignore) so it is in the image."""
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parent.parent
+    default_path = KBConfig().file_path
+    assert not default_path.startswith("reference/")
+    assert (repo / default_path).exists()
+    dockerignore = (repo / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    ignored_roots = {line.strip().rstrip("/") for line in dockerignore if line.strip()}
+    assert default_path.split("/")[0] not in ignored_roots
+
+
+def test_opener_prompt_does_not_treat_a_recording_notice_as_a_machine(sample_variables: DynamicVariables):
+    opener = PromptManager(persona="amelia").render_prompt(State.OPENER, sample_variables)
+    assert "A recording notice is NOT a machine" in opener
+    assert "Google Voice or carrier screening message" not in opener
+
+
+def test_wrap_up_steps_transition_in_the_same_turn(sample_variables: DynamicVariables):
+    pm = PromptManager(persona="amelia")
+    for state in (State.REACH_OWNER, State.LOCK_IN):
+        prompt = pm.render_prompt(state, sample_variables)
+        assert "in that same turn" in prompt
+        assert "after their reply" not in prompt

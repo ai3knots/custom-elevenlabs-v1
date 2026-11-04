@@ -113,6 +113,12 @@ Copy `.env.example` to `.env` and configure credentials:
 | `TELEPHONY__PROVIDER` | Provider mode (`livekit_sip`, `mock`, `console`) | `livekit_sip` |
 | `TELEPHONY__SIP_TRUNK_ID` | Default outbound SIP Trunk ID | `ST_xxxxxxxxx` |
 | `TELEPHONY__MAX_CONCURRENT_CALLS` | Global concurrency ceiling | `50` |
+| `TURN_DETECTOR_MODE` | End-of-turn strategy: `vad`, `stt-only`, `v1`, `v1-mini` (LiveKit audio turn detector) | `vad` |
+| `LLM_DEFAULT_MODEL` / `LLM_CONVERSATION_MODEL` / `LLM_FALLBACK_MODEL` | Override the Gemini models without a rebuild. The fallback must differ from the other two. | `gemini-3.5-flash` / `gemini-3.5-flash` / `gemini-3.5-flash-lite` |
+
+The `conversation.amd_timeout_seconds` setting in `config/defaults.yaml` (default `5.0`) caps how long answering-machine detection may delay the opening line after pickup.
+
+The Amelia knowledge base lives at `prompts/knowledge/Knowledge-base.md` (not under `reference/`, which is excluded from the Docker image). If you re-export it from ElevenLabs, copy it there. A missing file is logged as an error and the call continues without a knowledge base.
 
 ### 3.1 LiveKit Cloud SIP Setup
 

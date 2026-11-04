@@ -17,6 +17,7 @@ from livekit.agents import (
     AgentServer,
     AgentSession,
     JobContext,
+    JobProcess,
     TurnHandlingOptions,
     inference,
     room_io,
@@ -43,6 +44,9 @@ from src.providers import (
 
 logger = logging.getLogger("posivex.session")
 load_dotenv()
+
+# Longest the close step may take before the call is ended regardless.
+CLOSE_SAFETY_TIMEOUT_SECS = 25.0
 
 
 def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
@@ -110,6 +114,38 @@ def _resolve_outcome(fsm: ConversationFSM, user_turns: int) -> tuple[str, str]:
     if fsm.current_state in (State.CLOSE, State.END):
         return "other", "Call ended normally without a recorded outcome."
     return "unknown_dropped", f"Call ended while in state '{fsm.current_state.value}'."
+
+
+def _prewarmed_vad(ctx: JobContext, settings: Settings) -> Any | None:
+    """VAD loaded during process warm-up, if its settings match this call's."""
+    try:
+        cached = ctx.proc.userdata.get("vad")
+    except Exception:
+        return None
+    if not cached:
+        return None
+    cached_config, vad_instance = cached
+    return vad_instance if cached_config == settings.vad.model_dump() else None
+
+
+def prewarm_process(proc: JobProcess) -> None:
+    """Runs once in each job process before it receives a call.
+
+    Moves slow one-time work (imports, TLS setup, loading the VAD model) out of the live call,
+    where it blocked the event loop for hundreds of milliseconds and delayed the first audio.
+    """
+    import ssl
+
+    import asyncpg  # noqa: F401
+    import httpcore  # noqa: F401
+    import sqlalchemy.dialects.postgresql  # noqa: F401
+
+    ssl.create_default_context()
+    settings = _configured_settings or load_settings()
+    try:
+        proc.userdata["vad"] = (settings.vad.model_dump(), get_vad(settings.vad))
+    except Exception:
+        logger.exception("Could not prewarm the VAD model; it will be loaded per call.")
 
 
 async def _wait_for_answer(callee: rtc.RemoteParticipant, timeout: float) -> str:
@@ -220,7 +256,7 @@ async def run_agent_session(
 
     # Initialize components via provider registry
     stt_provider = get_stt(resolved_settings.stt, api_key=resolved_settings.deepgram_api_key)
-    vad_provider = get_vad(resolved_settings.vad)
+    vad_provider = _prewarmed_vad(ctx, resolved_settings) or get_vad(resolved_settings.vad)
     tts_provider = get_tts(resolved_settings.tts, api_key=resolved_settings.elevenlabs_api_key)
 
     # Setup primary and conversation LLMs with fallback
@@ -286,6 +322,8 @@ async def run_agent_session(
             logger.debug("Failed to publish telemetry to room: %s", e)
 
     async def handle_agent_event(event_type: str, payload: dict[str, Any]) -> None:
+        if event_type == "state_transition" and payload.get("to_state") == State.CLOSE.value:
+            arm_close_watch()
         await persist(
             f"event:{event_type}",
             recorder.record_event(
@@ -308,6 +346,17 @@ async def run_agent_session(
             ),
         })
 
+    transcript_buffer: list[dict[str, Any]] = []
+
+    def record_held_turn(text: str) -> None:
+        """Store what the callee said before the opening line (the LLM does not answer it)."""
+        transcript_buffer.append({
+            "role": "user",
+            "message": text,
+            "time_in_call_secs": time.monotonic() - started_at,
+            "interrupted": False,
+        })
+
     agent = PersonaAgent(
         fsm=fsm,
         prompt_manager=prompt_manager,
@@ -317,6 +366,9 @@ async def run_agent_session(
         call_id=call_id,
         event_handler=handle_agent_event,
         ignore_terms=resolved_settings.conversation.interruption_ignore_terms,
+        # The LLM stays quiet until the scripted opening line is spoken (see below).
+        hold_replies=True,
+        on_gated_turn=record_held_turn,
     )
 
     conv_cfg = resolved_settings.conversation
@@ -330,8 +382,6 @@ async def run_agent_session(
     )
 
     # ---- Transcript capture -------------------------------------------------------------------
-    transcript_buffer: list[dict[str, Any]] = []
-
     def on_conversation_item(ev: Any) -> None:
         item = getattr(ev, "item", None)
         if item is None or getattr(item, "type", None) != "message":
@@ -356,6 +406,28 @@ async def run_agent_session(
         if not termination["reason"]:
             termination["reason"] = reason
         session.shutdown(drain=drain)
+
+    # ---- Agent-driven hang-up after the closing line -------------------------------------------
+    # The close step speaks one line and then the call must end. The LLM is asked to call
+    # transition('end') itself, but if it does not, the call is ended here once the line has played
+    # (or after a safety timeout) instead of waiting for the callee to say goodbye.
+    close_watch: dict[str, Any] = {"armed": False, "speech_started": False, "task": None}
+
+    async def close_safety_timeout() -> None:
+        await asyncio.sleep(CLOSE_SAFETY_TIMEOUT_SECS)
+        logger.warning("Close step did not finish within %.0fs; ending the call.", CLOSE_SAFETY_TIMEOUT_SECS)
+        if not fsm.call_outcome:
+            fsm.set_outcome("other", rationale="Call closed without a recorded outcome.")
+        end_call("close_timeout")
+
+    def arm_close_watch() -> None:
+        close_watch["armed"] = True
+        close_watch["speech_started"] = False
+        if close_watch["task"] is None:
+            task = asyncio.create_task(close_safety_timeout())
+            close_watch["task"] = task
+            background_tasks.add(task)
+            task.add_done_callback(background_tasks.discard)
 
     # ---- Silence handling (user_away_timeout -> user_state_changed 'away') --------------------
     async def handle_away() -> None:
@@ -396,6 +468,16 @@ async def run_agent_session(
     session.on("user_state_changed", handle_user_state_changed)
 
     def handle_agent_state_changed(ev: Any) -> None:
+        if close_watch["armed"] and fsm.current_state == State.CLOSE:
+            new_agent_state = str(getattr(ev, "new_state", ""))
+            old_agent_state = str(getattr(ev, "old_state", ""))
+            if new_agent_state == "speaking":
+                close_watch["speech_started"] = True
+            elif old_agent_state == "speaking" and close_watch["speech_started"]:
+                logger.info("Closing line delivered; ending the call.")
+                if not fsm.call_outcome:
+                    fsm.set_outcome("other", rationale="Call closed without a recorded outcome.")
+                end_call("closing_line_delivered")
         spawn(broadcast_telemetry("agent_state_changed", {
             "agent_state": str(getattr(ev, "new_state", "unknown")),
             "current_node": fsm.current_state.value,
@@ -425,6 +507,8 @@ async def run_agent_session(
         nonlocal finalized
         if guard_task is not None:
             guard_task.cancel()
+        if close_watch["task"] is not None:
+            close_watch["task"].cancel()
         if finalized:
             return
         finalized = True
@@ -518,15 +602,24 @@ async def run_agent_session(
                 stt=None,
                 participant_identity=callee.identity,
                 ivr_detection=False,
-                detection_options={"no_speech_threshold": conv_cfg.amd_no_speech_seconds},
+                # `timeout` is a hard cap measured from pickup (wait_until_finished=False), so a recording
+                # notice followed by "Hello?" cannot hold the opening line back for 10+ seconds.
+                detection_options={
+                    "no_speech_threshold": conv_cfg.amd_no_speech_seconds,
+                    "timeout": conv_cfg.amd_timeout_seconds,
+                },
+                wait_until_finished=False,
             ) as detector:
                 if not await callee_answered():
                     return
                 try:
-                    result = await asyncio.wait_for(detector.execute(), timeout=45.0)
+                    result = await asyncio.wait_for(
+                        detector.execute(), timeout=conv_cfg.amd_timeout_seconds + 5.0
+                    )
                 except TimeoutError:
                     logger.warning("AMD timed out; treating callee as human.")
             if result is not None:
+                agent.amd_category = str(getattr(result.category, "value", result.category))
                 logger.info("AMD result: %s (transcript: %s)", result.category, result.transcript)
                 if result.category in ("machine-vm", "machine-unavailable"):
                     fsm.set_outcome("voicemail", rationale=f"AMD: {result.category}. {result.transcript[:200]}")
@@ -541,9 +634,14 @@ async def run_agent_session(
     else:
         logger.info("Non-SIP participant joined (%s).", callee.identity)
 
-    # Callee is human (or uncertain): deliver the opening first message
+    if fsm.is_terminal or termination["reason"]:
+        return
+
+    # Callee is human (or uncertain): deliver the opening first message. The LLM was held back until
+    # now, so this is the first and only opener; from here on it may answer the callee normally.
     first_msg = prompt_manager.get_first_message(call_request.dynamic_variables)
     logger.info("Speaking first message: '%s'", first_msg)
+    agent.open_reply_gate()
     speech_handle = session.say(first_msg, allow_interruptions=True)
     await speech_handle.wait_for_playout()
 
@@ -577,6 +675,7 @@ def create_agent_server(settings: Settings | None = None) -> AgentServer:
         os.environ["LIVEKIT_API_SECRET"] = app_settings.livekit_api_secret
 
     server = AgentServer(**server_kwargs)
+    server.setup_fnc = prewarm_process
     agent_name = os.environ.get("LIVEKIT_AGENT_NAME", "posivex-agent")
     server.rtc_session(default_agent_entrypoint, agent_name=agent_name)
 

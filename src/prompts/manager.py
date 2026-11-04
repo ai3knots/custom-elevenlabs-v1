@@ -79,7 +79,12 @@ class PromptManager:
 
         # In CONVERSATION state, attach inline knowledge base if enabled
         if state == State.CONVERSATION:
-            kb_text = self.kb_provider.load_kb()
+            try:
+                kb_text = self.kb_provider.load_kb()
+            except Exception:
+                # Never let a knowledge-base problem (unreadable file, token budget) break the call.
+                logger.exception("Could not load the knowledge base; continuing without it.")
+                kb_text = ""
             if kb_text:
                 sections.append(f"# Knowledge Base\n\n{kb_text}")
 
