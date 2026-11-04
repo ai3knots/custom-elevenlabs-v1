@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
         "-l",
         choices=["en", "es"],
         default="en",
-        help="Call language (en or es, default: en)",
+        help="Call language (the agent speaks English only; kept for API compatibility)",
     )
     parser.add_argument(
         "--api-url",

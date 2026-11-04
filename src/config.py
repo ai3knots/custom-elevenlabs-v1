@@ -45,7 +45,6 @@ class LLMConfig(BaseModel):
 
     provider: Literal["google", "mock"] = "google"
     default_model: str = "gemini-3.5-flash"
-    conversation_model: str = "gemini-3.5-flash"
     # Must differ from the primary models, otherwise the fallback adds retries without resilience.
     fallback_model: str = "gemini-3.5-flash-lite"
     temperature: float = 0.0
@@ -87,9 +86,13 @@ class ConversationConfig(BaseModel):
     """Conversation guardrails, timeouts, and interruption ignore terms."""
 
     max_duration_seconds: int = 900
-    silence_timeout_seconds: float = 15.0
-    max_silence_count: int = 3
+    # The call ends after this many seconds of caller silence (like the reference ElevenLabs agent).
+    silence_end_call_seconds: float = 15.0
+    # skip_turn ("hold on", "let me get the owner") suspends the silence timer for this long.
     hold_duration_seconds: float = 12.0
+    # Turn-taking is the same for the whole call; 4 s lets people dictate emails and numbers.
+    min_endpointing_delay: float = 0.5
+    max_endpointing_delay: float = 4.0
     amd_enabled: bool = True
     ring_timeout_seconds: float = 75.0
     interruption_min_words: int = 1
@@ -319,7 +322,6 @@ def load_settings(
     # LLM model overrides from env, so latency experiments need no rebuild
     for env_var, field_name in (
         ("LLM_DEFAULT_MODEL", "default_model"),
-        ("LLM_CONVERSATION_MODEL", "conversation_model"),
         ("LLM_FALLBACK_MODEL", "fallback_model"),
     ):
         model_override = os.getenv(env_var)

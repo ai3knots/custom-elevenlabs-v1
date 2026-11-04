@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from src.config import CallRequest, DynamicVariables, load_settings
 from src.db.base import Base
-from src.fsm import ConversationFSM, State
 from src.metrics.costs import CostAccumulator
 from src.metrics.prometheus import get_latest_metrics
 from src.persistence.recorder import CallRecorder
@@ -43,28 +42,23 @@ async def run_smoke_test() -> bool:
 
     # 2. Prompts & Knowledge Base
     try:
-        prompt_mgr = PromptManager(persona="amelia", language="en", kb_config=settings.kb)
+        prompt_mgr = PromptManager(persona="amelia", kb_config=settings.kb)
         first_msg = prompt_mgr.get_first_message(dyn)
         assert len(first_msg) > 10
-        prompt_en = prompt_mgr.render_prompt(State.CONVERSATION, dyn)
+        prompt_en = prompt_mgr.render_prompt(dyn)
         assert "Interchange" in prompt_en or "interchange" in prompt_en.lower()
-        print("  [PASS] 2. Prompt & Knowledge Base Engine (Bilingual + Pricing)")
+        print("  [PASS] 2. Prompt & Knowledge Base Engine (Single prompt + Pricing)")
     except Exception as e:
         print(f"  [FAIL] 2. Prompts & KB: {e}")
         success = False
 
-    # 3. Finite State Machine
+    # 3. Single system prompt
     try:
-        fsm = ConversationFSM()
-        assert fsm.current_state == State.OPENER
-        assert await fsm.transition(State.REACH_OWNER)
-        assert await fsm.transition(State.CONVERSATION)
-        assert await fsm.transition(State.LOCK_IN)
-        assert await fsm.transition(State.CLOSE)
-        assert await fsm.transition(State.END)
-        print("  [PASS] 3. Finite State Machine (7 States, Transitions, Bounds)")
+        assert "Step F: Closing the call" in prompt_en
+        assert "{{" not in prompt_en
+        print("  [PASS] 3. Single system prompt (Steps A-F, tools, knowledge base)")
     except Exception as e:
-        print(f"  [FAIL] 3. State Machine: {e}")
+        print(f"  [FAIL] 3. System prompt: {e}")
         success = False
 
     # 4. Telephony Provider

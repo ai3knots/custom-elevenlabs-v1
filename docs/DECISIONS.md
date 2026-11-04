@@ -190,3 +190,12 @@ User instruction issued a scope change focusing on production simplicity:
   - English and Spanish backchannel ignore terms (16 English, 5 Spanish).
   - Parity `dnc_close` state with literal apology line and `do_not_call` outcome enum.
   - Safety rule: LLM has no hangup tool; only state machine ends calls.
+
+
+## Single prompt replaces the state machine (2026-11-05)
+
+Superseding "Single Agent + Explicit State Machine" above. The agent is one `PersonaAgent` with the ElevenLabs "Single Master Prompt"
+(Steps A to F), the knowledge base appended, and three tools (`end_call`, `skip_turn`, `voicemail_detection`). Reasons: no `transition`
+round trip (it added 2 to 3 s to the turns that changed state), no FSM/tool race conditions, and parity with the ElevenLabs agent
+`agent_2701m6e2fw2eehd97r93d4v8x9yc`. The outcome is decided after the call by a classifier instead of a tool the model could forget or misuse.
+Trade-off: the model tracks the step itself, so it needs scenario testing. Details in `docs/SINGLE_PROMPT_MIGRATION_PLAN.md`.

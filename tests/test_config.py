@@ -109,21 +109,25 @@ def test_call_request_elevenlabs_aliases():
 
 
 
-def test_routing_states_use_flash_not_flash_lite():
-    """Opener, reach_owner, lock_in and conversation all route on gemini-3.5-flash (as live ElevenLabs does)."""
-    from src.fsm.states import STATE_REGISTRY, State
-
-    for state in (State.OPENER, State.REACH_OWNER, State.CONVERSATION, State.LOCK_IN):
-        assert STATE_REGISTRY[state].default_model == "gemini-3.5-flash"
+def test_single_model_is_gemini_flash():
+    """One Gemini 3.5 Flash model serves the whole call; there is no per-state model."""
     settings = load_settings()
-    assert settings.llm.default_model == settings.llm.conversation_model == "gemini-3.5-flash"
+    assert settings.llm.default_model == "gemini-3.5-flash"
+    assert not hasattr(settings.llm, "conversation_model")
 
 
-def test_fallback_llm_differs_from_primary_models():
+def test_fallback_llm_differs_from_primary_model():
     from src.config import LLMConfig
 
     cfg = LLMConfig()
-    assert cfg.fallback_model not in (cfg.default_model, cfg.conversation_model)
+    assert cfg.fallback_model != cfg.default_model
+
+
+def test_silence_and_endpointing_defaults():
+    conv = load_settings().conversation
+    assert conv.silence_end_call_seconds == 15.0
+    assert conv.hold_duration_seconds == 12.0
+    assert (conv.min_endpointing_delay, conv.max_endpointing_delay) == (0.5, 4.0)
 
 
 def test_amd_timeout_default_and_llm_env_overrides(monkeypatch):

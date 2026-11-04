@@ -22,7 +22,6 @@ stt:
 llm:
   provider: "google"
   default_model: "gemini-3.5-flash"
-  conversation_model: "gemini-3.5-flash"
   fallback_model: "gemini-3.5-flash-lite" # must differ from the primary models
   # For lower latency, try gemini-3.5-flash-lite as default_model (env: LLM_DEFAULT_MODEL).
   temperature: 0.0
@@ -52,9 +51,10 @@ turn_detector:
 
 conversation:
   max_duration_seconds: 900
-  silence_timeout_seconds: 15.0
-  max_silence_count: 3
-  hold_duration_seconds: 12.0
+  silence_end_call_seconds: 15.0 # call ends after this much caller silence
+  hold_duration_seconds: 12.0 # skip_turn ("hold on") suspends the silence timer this long
+  min_endpointing_delay: 0.5
+  max_endpointing_delay: 4.0
   amd_timeout_seconds: 3.0 # hard cap on answering-machine detection, measured from pickup
   max_user_speech_seconds: 8.0 # force an answer when one uninterrupted caller turn runs this long (0 disables)
   interruption_min_words: 1

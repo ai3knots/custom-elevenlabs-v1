@@ -1,3 +1,5 @@
+> **Superseded.** The agent is now a single system prompt with three tools and a post-call outcome classifier. See `docs/SINGLE_PROMPT_MIGRATION_PLAN.md`. The state machine described below no longer exists.
+
 # LiveKit Agents Outbound Sales Architecture Plan
 
 > **Target Agent:** Posivex Clover/NRS Outbound Voice Agent (Amelia & Michael personas)  

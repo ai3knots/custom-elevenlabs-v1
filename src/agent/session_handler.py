@@ -25,11 +25,10 @@ from livekit.agents import (
 from livekit.agents.metrics.usage import LLMModelUsage, STTModelUsage, TTSModelUsage
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from src.agent.persona_agent import PersonaAgent
+from src.agent.persona_agent import CallState, PersonaAgent, is_closing_line
+from src.analysis import CallSignals, classify_transcript, resolve_call_outcome
 from src.config import CallRequest, Settings, load_settings
 from src.db.base import get_engine, get_sessionmaker
-from src.fsm.machine import ConversationFSM
-from src.fsm.states import State, StateMetadata
 from src.logging import set_call_id
 from src.metrics.costs import CostAccumulator
 from src.persistence.recorder import CallRecorder
@@ -44,10 +43,6 @@ from src.providers import (
 
 logger = logging.getLogger("posivex.session")
 load_dotenv()
-
-# Longest the close step may take before the call is ended regardless.
-CLOSE_SAFETY_TIMEOUT_SECS = 25.0
-
 
 def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
     """Parse and validate CallRequest from dispatch/room metadata JSON.
@@ -105,15 +100,8 @@ def _usage_into_costs(session: AgentSession, costs: CostAccumulator, duration_se
     costs.add_telephony_usage(duration_secs)
 
 
-def _resolve_outcome(fsm: ConversationFSM, user_turns: int) -> tuple[str, str]:
-    """Outcome to report; falls back to the CRM's fallback outcomes when the agent recorded none."""
-    if fsm.call_outcome:
-        return fsm.call_outcome, fsm.outcome_rationale or ""
-    if user_turns == 0:
-        return "hangup_no_speak", "Call ended without the callee speaking."
-    if fsm.current_state in (State.CLOSE, State.END):
-        return "other", "Call ended normally without a recorded outcome."
-    return "unknown_dropped", f"Call ended while in state '{fsm.current_state.value}'."
+# Grace period after an agent goodbye before the call is ended if the model did not call end_call.
+CLOSING_GRACE_SECS = 2.5
 
 
 def _prewarmed_vad(ctx: JobContext, settings: Settings) -> Any | None:
@@ -180,12 +168,12 @@ async def _wait_for_caller_quiet(
     return False
 
 
-def build_turn_handling(settings: Settings, meta: StateMetadata) -> TurnHandlingOptions:
+def build_turn_handling(settings: Settings) -> TurnHandlingOptions:
     """Turn-taking options for AgentSession: end-of-turn strategy, endpointing and interruptions."""
     turn_handling: TurnHandlingOptions = {
         "endpointing": {
-            "min_delay": meta.min_endpointing_delay,
-            "max_delay": meta.max_endpointing_delay,
+            "min_delay": settings.conversation.min_endpointing_delay,
+            "max_delay": settings.conversation.max_endpointing_delay,
         },
         # A transcribed word is required before the caller can interrupt, which is what lets
         # PersonaAgent.stt_node swallow "mm-hmm" style acknowledgements.
@@ -278,38 +266,27 @@ async def run_agent_session(
     vad_provider = _prewarmed_vad(ctx, resolved_settings) or get_vad(resolved_settings.vad)
     tts_provider = get_tts(resolved_settings.tts, api_key=resolved_settings.elevenlabs_api_key)
 
-    # Setup primary and conversation LLMs with fallback. Building a Gemini client loads the CA bundle
-    # (~300 ms of CPU), so it runs in a thread instead of stalling the event loop at call start.
-    def _build_llms() -> tuple[Any, Any, Any]:
+    # Primary and fallback Gemini models. Building a Gemini client loads the CA bundle (~300 ms of CPU),
+    # so it runs in a thread instead of stalling the event loop at call start.
+    def _build_llms() -> tuple[Any, Any]:
         key = resolved_settings.gemini_api_key
         return (
             get_llm(resolved_settings.llm.default_model, resolved_settings.llm, api_key=key),
             get_llm(resolved_settings.llm.fallback_model, resolved_settings.llm, api_key=key),
-            get_llm(resolved_settings.llm.conversation_model, resolved_settings.llm, api_key=key),
         )
 
-    llm_primary_base, llm_fallback_base, llm_conversation_base = await asyncio.to_thread(_build_llms)
+    llm_primary_base, llm_fallback_base = await asyncio.to_thread(_build_llms)
 
-    # Share a single thought_signatures dictionary across all Gemini LLM instances
+    # Share a single thought_signatures dictionary across the Gemini LLM instances
     shared_thought_signatures: dict[str, bytes] = {}
-    for base_llm in (llm_primary_base, llm_fallback_base, llm_conversation_base):
+    for base_llm in (llm_primary_base, llm_fallback_base):
         if hasattr(base_llm, "_thought_signatures"):
             object.__setattr__(base_llm, "_thought_signatures", shared_thought_signatures)
 
     llm_primary = create_fallback_llm(llm_primary_base, llm_fallback_base, resolved_settings.llm)
-    llm_conversation = create_fallback_llm(llm_conversation_base, llm_fallback_base, resolved_settings.llm)
 
-    # Initialize FSM and PromptManager
-    fsm = ConversationFSM(
-        max_silence_count=resolved_settings.conversation.max_silence_count,
-        hold_duration_seconds=resolved_settings.conversation.hold_duration_seconds,
-    )
-
-    prompt_manager = PromptManager(
-        persona=call_request.persona,
-        language=call_request.language,
-        kb_config=resolved_settings.kb,
-    )
+    call_state = CallState()
+    prompt_manager = PromptManager(persona=call_request.persona, kb_config=resolved_settings.kb)
 
     background_tasks: set[asyncio.Task[Any]] = set()
 
@@ -336,29 +313,11 @@ async def run_agent_session(
             logger.debug("Failed to publish telemetry to room: %s", e)
 
     async def handle_agent_event(event_type: str, payload: dict[str, Any]) -> None:
-        if event_type == "state_transition" and payload.get("to_state") == State.CLOSE.value:
-            arm_close_watch()
         await persist(
             f"event:{event_type}",
-            recorder.record_event(
-                call_id=call_id,
-                event_type=event_type,
-                state=payload.get("to_state"),
-                payload=payload,
-            ),
+            recorder.record_event(call_id=call_id, event_type=event_type, state=None, payload=payload),
         )
-        await broadcast_telemetry(event_type, {
-            "from_node": payload.get("from_state"),
-            "to_node": payload.get("to_state"),
-            "current_node": fsm.current_state.value,
-            "reason": payload.get("reason", ""),
-            "silence_count": fsm.silence_count,
-            "active_model": (
-                resolved_settings.llm.conversation_model
-                if fsm.current_state.value == "conversation"
-                else resolved_settings.llm.default_model
-            ),
-        })
+        await broadcast_telemetry(event_type, {"reason": payload.get("reason", "")})
 
     transcript_buffer: list[dict[str, Any]] = []
 
@@ -372,14 +331,13 @@ async def run_agent_session(
         })
 
     agent = PersonaAgent(
-        fsm=fsm,
-        prompt_manager=prompt_manager,
-        variables=call_request.dynamic_variables,
-        llm_primary=llm_primary,
-        llm_conversation=llm_conversation,
+        instructions=prompt_manager.render_prompt(call_request.dynamic_variables),
+        call_state=call_state,
+        on_end_call=lambda reason, drain: end_call(reason, drain=drain),
         call_id=call_id,
         event_handler=handle_agent_event,
         ignore_terms=resolved_settings.conversation.interruption_ignore_terms,
+        hold_duration_seconds=resolved_settings.conversation.hold_duration_seconds,
         # The LLM stays quiet until the scripted opening line is spoken (see below).
         hold_replies=True,
         on_gated_turn=record_held_turn,
@@ -391,8 +349,8 @@ async def run_agent_session(
         llm=llm_primary,
         tts=tts_provider,
         vad=vad_provider,
-        user_away_timeout=conv_cfg.silence_timeout_seconds,
-        turn_handling=build_turn_handling(resolved_settings, fsm.metadata),
+        user_away_timeout=conv_cfg.silence_end_call_seconds,
+        turn_handling=build_turn_handling(resolved_settings),
     )
 
     # ---- Transcript capture -------------------------------------------------------------------
@@ -404,14 +362,41 @@ async def run_agent_session(
         text = item.text_content
         if role is None or not text:
             return
+        interrupted = bool(getattr(item, "interrupted", False))
         transcript_buffer.append({
             "role": role,
             "message": text,
             "time_in_call_secs": time.monotonic() - started_at,
-            "interrupted": bool(getattr(item, "interrupted", False)),
+            "interrupted": interrupted,
         })
+        if role == "agent" and not interrupted and is_closing_line(text):
+            watch_for_closing()
 
     session.on("conversation_item_added", on_conversation_item)
+
+    # ---- Safety net for a goodbye without end_call --------------------------------------------
+    closing_task: dict[str, asyncio.Task[Any] | None] = {"task": None}
+
+    async def hang_up_after_goodbye() -> None:
+        await asyncio.sleep(CLOSING_GRACE_SECS)
+        if session.user_state == "speaking" or session.agent_state == "speaking":
+            return
+        logger.info("Goodbye was spoken without end_call; ending the call.")
+        call_state.end_reason = call_state.end_reason or "closing_line_detected"
+        end_call("closing_line_detected")
+
+    def cancel_closing_watch() -> None:
+        task = closing_task["task"]
+        if task is not None and not task.done():
+            task.cancel()
+        closing_task["task"] = None
+
+    def watch_for_closing() -> None:
+        cancel_closing_watch()
+        task = asyncio.create_task(hang_up_after_goodbye())
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
+        closing_task["task"] = task
 
     # ---- Termination bookkeeping --------------------------------------------------------------
     termination: dict[str, str] = {"reason": ""}
@@ -421,49 +406,27 @@ async def run_agent_session(
             termination["reason"] = reason
         session.shutdown(drain=drain)
 
-    # ---- Agent-driven hang-up after the closing line -------------------------------------------
-    # The close step speaks one line and then the call must end. The LLM is asked to call
-    # transition('end') itself, but if it does not, the call is ended here once the line has played
-    # (or after a safety timeout) instead of waiting for the callee to say goodbye.
-    close_watch: dict[str, Any] = {"armed": False, "speech_started": False, "task": None}
-
-    async def close_safety_timeout() -> None:
-        await asyncio.sleep(CLOSE_SAFETY_TIMEOUT_SECS)
-        logger.warning("Close step did not finish within %.0fs; ending the call.", CLOSE_SAFETY_TIMEOUT_SECS)
-        if not fsm.call_outcome:
-            fsm.set_outcome("other", rationale="Call closed without a recorded outcome.")
-        end_call("close_timeout")
-
-    def arm_close_watch() -> None:
-        close_watch["armed"] = True
-        close_watch["speech_started"] = False
-        if close_watch["task"] is None:
-            task = asyncio.create_task(close_safety_timeout())
-            close_watch["task"] = task
-            background_tasks.add(task)
-            task.add_done_callback(background_tasks.discard)
-
     # ---- Silence handling (user_away_timeout -> user_state_changed 'away') --------------------
+    # Like the reference ElevenLabs agent: silence ends the call, except while the caller asked us to
+    # hold (skip_turn). Before the caller has said anything, the agent gets one casual "Hello?" first.
+    hello_sent = False
+    opener_spoken = False
+
     async def handle_away() -> None:
-        if fsm.is_holding:
-            # The merchant asked us to wait; keep listening without counting silence.
+        nonlocal hello_sent
+        if not opener_spoken or call_state.is_holding:
+            # Still ringing / detecting an answering machine, or the caller asked us to hold.
             session.reset_away_timer()
             return
-        count = await fsm.record_silence()
-        await broadcast_telemetry("silence_timeout", {
-            "silence_count": count,
-            "max_silence_count": conv_cfg.max_silence_count,
-            "message": f"User silence timeout ({count}/{conv_cfg.max_silence_count})",
-        })
-        if fsm.is_terminal:
-            end_call("silence_timeout", drain=False)
-            return
-        session.generate_reply(
-            instructions=(
-                "The caller has gone quiet. In one short, natural sentence, check whether they are "
-                "still there. Do not repeat your pitch."
+        if call_state.user_turns == 0 and not hello_sent:
+            hello_sent = True
+            session.generate_reply(
+                instructions='Say one casual "Hello?" once and nothing else. Do not repeat your introduction.'
             )
-        )
+            return
+        logger.info("Caller silent for %.0fs; ending the call.", conv_cfg.silence_end_call_seconds)
+        call_state.end_reason = call_state.end_reason or "silence"
+        end_call("silence_timeout", drain=False)
 
     long_turn_task: dict[str, asyncio.Task[Any] | None] = {"task": None}
 
@@ -498,33 +461,14 @@ async def run_agent_session(
         if new_state == "away":
             spawn(handle_away())
         elif new_state == "speaking":
-            fsm.reset_silence()
-            if fsm.is_holding:
-                fsm.release_hold()
-        spawn(broadcast_telemetry("user_state_changed", {
-            "user_state": new_state,
-            "current_node": fsm.current_state.value,
-            "silence_count": fsm.silence_count,
-        }))
+            call_state.release_hold()
+            cancel_closing_watch()
+        spawn(broadcast_telemetry("user_state_changed", {"user_state": new_state}))
 
     session.on("user_state_changed", handle_user_state_changed)
 
     def handle_agent_state_changed(ev: Any) -> None:
-        if close_watch["armed"] and fsm.current_state == State.CLOSE:
-            new_agent_state = str(getattr(ev, "new_state", ""))
-            old_agent_state = str(getattr(ev, "old_state", ""))
-            if new_agent_state == "speaking":
-                close_watch["speech_started"] = True
-            elif old_agent_state == "speaking" and close_watch["speech_started"]:
-                logger.info("Closing line delivered; ending the call.")
-                if not fsm.call_outcome:
-                    fsm.set_outcome("other", rationale="Call closed without a recorded outcome.")
-                end_call("closing_line_delivered")
-        spawn(broadcast_telemetry("agent_state_changed", {
-            "agent_state": str(getattr(ev, "new_state", "unknown")),
-            "current_node": fsm.current_state.value,
-            "silence_count": fsm.silence_count,
-        }))
+        spawn(broadcast_telemetry("agent_state_changed", {"agent_state": str(getattr(ev, "new_state", "unknown"))}))
 
     session.on("agent_state_changed", handle_agent_state_changed)
 
@@ -542,6 +486,7 @@ async def run_agent_session(
     if webhook_destination and "/api/webhooks" not in webhook_destination:
         webhook_destination = f"{webhook_destination.rstrip('/')}/api/webhooks/elevenlabs"
 
+    signals = CallSignals()
     finalized = False
     guard_task: asyncio.Task[None] | None = None
 
@@ -549,14 +494,28 @@ async def run_agent_session(
         nonlocal finalized
         if guard_task is not None:
             guard_task.cancel()
-        if close_watch["task"] is not None:
-            close_watch["task"].cancel()
+        cancel_closing_watch()
         if finalized:
             return
         finalized = True
         duration = time.monotonic() - started_at
-        user_turns = sum(1 for t in transcript_buffer if t["role"] == "user")
-        outcome, rationale = _resolve_outcome(fsm, user_turns)
+        signals.amd_category = call_state.amd_category
+        signals.voicemail_tool_called = call_state.voicemail_detected
+        signals.do_not_call_requested = call_state.do_not_call
+        if call_state.voicemail_detected and not signals.forced_outcome:
+            signals.forced_outcome = "voicemail"
+            signals.forced_rationale = "The agent detected a voicemail or recorded message."
+
+        async def classify(transcript: list[Any], sig: CallSignals) -> Any:
+            return await classify_transcript(
+                transcript,
+                sig,
+                api_key=resolved_settings.gemini_api_key,
+                model=resolved_settings.llm.default_model,
+            )
+
+        result = await resolve_call_outcome(list(transcript_buffer), signals, classify)
+        logger.info("Call outcome: %s (%s) [%s]", result.outcome, result.rationale, result.source)
         _usage_into_costs(session, cost_accumulator, duration)
         try:
             await persist("transcripts", recorder.record_transcript_batch(call_id, transcript_buffer))
@@ -567,8 +526,9 @@ async def run_agent_session(
                     call_id=call_id,
                     duration_secs=duration,
                     termination_reason=termination["reason"] or "normal_completion",
-                    call_outcome=outcome,
-                    outcome_rationale=rationale,
+                    call_outcome=result.outcome,
+                    outcome_rationale=result.rationale,
+                    transcript_summary=result.summary,
                     total_cost=cost_accumulator.total_cost,
                     charging_details=cost_accumulator.get_charging_breakdown(),
                     destination_url=webhook_destination,
@@ -584,8 +544,7 @@ async def run_agent_session(
     async def duration_guard() -> None:
         await asyncio.sleep(conv_cfg.max_duration_seconds)
         logger.warning("Max call duration (%ss) reached; ending call.", conv_cfg.max_duration_seconds)
-        if not fsm.call_outcome:
-            fsm.set_outcome("other", rationale="Maximum call duration reached.")
+        signals.notes.append("The call was cut off at the maximum call duration.")
         end_call("max_duration", drain=False)
 
     guard_task = asyncio.create_task(duration_guard())
@@ -601,8 +560,6 @@ async def run_agent_session(
     await broadcast_telemetry("session_init", {
         "call_id": call_id,
         "persona": call_request.persona,
-        "current_node": fsm.current_state.value,
-        "silence_count": fsm.silence_count,
         "active_model": resolved_settings.llm.default_model,
         "dynamic_variables": call_request.dynamic_variables.model_dump(),
     })
@@ -613,7 +570,7 @@ async def run_agent_session(
         callee = await ctx.wait_for_participant()
     except Exception as e:
         logger.warning("No callee joined: %s", e)
-        fsm.set_outcome("no_answer", rationale="No participant joined the room.")
+        signals.forced_outcome, signals.forced_rationale = "no_answer", "No participant joined the room."
         end_call("no_participant", drain=False)
         return
 
@@ -629,7 +586,7 @@ async def run_agent_session(
             answer = await _wait_for_answer(callee, conv_cfg.ring_timeout_seconds)
             if answer != "active":
                 logger.warning("Callee did not answer (%s).", answer)
-                fsm.set_outcome("no_answer", rationale=f"Call not answered ({answer}).")
+                signals.forced_outcome, signals.forced_rationale = "no_answer", f"Call not answered ({answer})."
                 end_call("no_answer", drain=False)
                 return False
             logger.info("SIP callee answered (%s).", callee.identity)
@@ -661,14 +618,16 @@ async def run_agent_session(
                 except TimeoutError:
                     logger.warning("AMD timed out; treating callee as human.")
             if result is not None:
-                agent.amd_category = str(getattr(result.category, "value", result.category))
+                call_state.amd_category = str(getattr(result.category, "value", result.category))
                 logger.info("AMD result: %s (transcript: %s)", result.category, result.transcript)
                 if result.category in ("machine-vm", "machine-unavailable"):
-                    fsm.set_outcome("voicemail", rationale=f"AMD: {result.category}. {result.transcript[:200]}")
+                    signals.forced_outcome = "voicemail"
+                    signals.forced_rationale = f"AMD: {result.category}. {result.transcript[:200]}"
                     end_call("voicemail_detected", drain=False)
                     return
                 if result.category == "machine-ivr":
-                    fsm.set_outcome("automated_menu", rationale=f"AMD: automated menu. {result.transcript[:200]}")
+                    signals.forced_outcome = "automated_menu"
+                    signals.forced_rationale = f"AMD: automated menu. {result.transcript[:200]}"
                     end_call("automated_menu_detected", drain=False)
                     return
         elif not await callee_answered():
@@ -676,7 +635,7 @@ async def run_agent_session(
     else:
         logger.info("Non-SIP participant joined (%s).", callee.identity)
 
-    if fsm.is_terminal or termination["reason"]:
+    if termination["reason"]:
         return
 
     # Callee is human (or uncertain): deliver the opening first message. The LLM was held back until
@@ -690,6 +649,8 @@ async def run_agent_session(
     agent.open_reply_gate()
     speech_handle = session.say(first_msg, allow_interruptions=False)
     await speech_handle.wait_for_playout()
+    opener_spoken = True
+    session.reset_away_timer()
 
 
 _configured_settings: Settings | None = None

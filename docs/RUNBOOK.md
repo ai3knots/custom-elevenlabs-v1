@@ -40,7 +40,7 @@ The Posivex Voice Calling service is a modular, high-performance voice AI soluti
 |              v                                                        |
 |   +---------------------------------------------------------------+   |
 |   |                LiveKit Voice Agent Worker                     |   |
-|   |  - Single Agent + 7-State FSM (opener -> close/dnc)           |   |
+|   |  - One system prompt, 3 tools (end_call/skip_turn/voicemail)  |   |
 |   |  - Deepgram Nova-3 STT (en / es / multi)                      |   |
 |   |  - ElevenLabs Conversational v3 TTS (WebSocket streaming)     |   |
 |   |  - Gemini 3.5 Flash / Lite + FallbackAdapter                  |   |
@@ -114,9 +114,18 @@ Copy `.env.example` to `.env` and configure credentials:
 | `TELEPHONY__SIP_TRUNK_ID` | Default outbound SIP Trunk ID | `ST_xxxxxxxxx` |
 | `TELEPHONY__MAX_CONCURRENT_CALLS` | Global concurrency ceiling | `50` |
 | `TURN_DETECTOR_MODE` | End-of-turn strategy: `vad`, `stt-only`, `v1`, `v1-mini` (LiveKit audio turn detector) | `vad` |
-| `LLM_DEFAULT_MODEL` / `LLM_CONVERSATION_MODEL` / `LLM_FALLBACK_MODEL` | Override the Gemini models without a rebuild. The fallback must differ from the other two. | `gemini-3.5-flash` / `gemini-3.5-flash` / `gemini-3.5-flash-lite` |
+| `LLM_DEFAULT_MODEL` / `LLM_FALLBACK_MODEL` | Override the Gemini models without a rebuild. The fallback must differ from the default. The default also runs the post-call outcome classifier. | `gemini-3.5-flash` / `gemini-3.5-flash-lite` |
 
 The `conversation.amd_timeout_seconds` setting in `config/defaults.yaml` (default `3.0`) caps how long answering-machine detection may delay the opening line after pickup. The opening line waits for the caller to stop talking (up to 3 s) and cannot be interrupted. `conversation.max_user_speech_seconds` (default `8.0`, `0` disables) makes the agent answer when VAD reports one uninterrupted caller turn for that long, e.g. because of background noise.
+
+### Single-prompt agent
+
+The agent is one system prompt (`prompts/<persona>/system.j2`, Steps A to F) plus the knowledge base, with three tools: `end_call`, `skip_turn` and `voicemail_detection`. There is no state machine. Related settings in `config/defaults.yaml` (`conversation:`):
+
+- `silence_end_call_seconds` (15): the call ends after this much caller silence; `skip_turn` ("hold on") suspends it for `hold_duration_seconds` (12). Before the caller has said anything the agent says one "Hello?" first.
+- `min_endpointing_delay` / `max_endpointing_delay` (0.5 / 4.0): one turn-taking setting for the whole call.
+- If the model says a goodbye but forgets `end_call`, the call is ended 2.5 s after the goodbye (`CLOSING_GRACE_SECS`).
+- The call outcome is decided after the call by one structured Gemini call over the transcript (`src/analysis/outcome.py`, rules in `prompts/analysis/call_outcome.md`). An answering-machine verdict or the voicemail tool forces `voicemail` / `automated_menu`; no caller speech gives `hangup_no_speak`; a classifier failure gives `other`.
 
 The Amelia knowledge base lives at `prompts/knowledge/Knowledge-base.md` (not under `reference/`, which is excluded from the Docker image). If you re-export it from ElevenLabs, copy it there. A missing file is logged as an error and the call continues without a knowledge base.
 

@@ -7,7 +7,6 @@ from livekit.agents import stt
 from src.agent.interruption import build_ignore_keys, drop_backchannel_transcripts, is_ignorable
 from src.agent.session_handler import build_turn_handling
 from src.config import ConversationConfig, Settings
-from src.fsm.states import STATE_REGISTRY, State
 
 KEYS = build_ignore_keys(ConversationConfig().interruption_ignore_terms)
 
@@ -57,18 +56,15 @@ async def test_backchannel_dropped_only_while_agent_speaks():
 
 def test_build_turn_handling_maps_settings():
     settings = Settings()
-    th = build_turn_handling(settings, STATE_REGISTRY[State.OPENER])
+    th = build_turn_handling(settings)
     assert th["turn_detection"] == "vad"
     assert th["interruption"] == {"min_words": 1}
-    assert th["endpointing"] == {"min_delay": 0.3, "max_delay": 2.0}
-
-    patient = build_turn_handling(settings, STATE_REGISTRY[State.LOCK_IN])
-    assert patient["endpointing"] == {"min_delay": 1.0, "max_delay": 6.0}
+    assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 4.0}
 
     settings.turn_detector.mode = "stt-only"
-    assert build_turn_handling(settings, STATE_REGISTRY[State.OPENER])["turn_detection"] == "stt"
+    assert build_turn_handling(settings)["turn_detection"] == "stt"
     settings.turn_detector.mode = "eou"
-    assert build_turn_handling(settings, STATE_REGISTRY[State.OPENER])["turn_detection"] == "vad"
+    assert build_turn_handling(settings)["turn_detection"] == "vad"
 
 
 def test_build_turn_handling_audio_turn_detector(monkeypatch):
@@ -81,10 +77,10 @@ def test_build_turn_handling_audio_turn_detector(monkeypatch):
     settings = Settings()
     for mode in ("v1", "v1-mini"):
         settings.turn_detector.mode = mode
-        th = build_turn_handling(settings, STATE_REGISTRY[State.OPENER])
+        th = build_turn_handling(settings)
         assert isinstance(th["turn_detection"], inference.TurnDetector)
         # Endpointing and interruption settings are unchanged by the detector choice.
-        assert th["endpointing"] == {"min_delay": 0.3, "max_delay": 2.0}
+        assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 4.0}
         assert th["interruption"] == {"min_words": 1}
 
 
