@@ -32,6 +32,7 @@ from src.db.base import get_engine, get_sessionmaker
 from src.logging import set_call_id
 from src.metrics.costs import CostAccumulator
 from src.persistence.recorder import CallRecorder
+from src.persistence.remote import RemoteRecorder
 from src.prompts.manager import PromptManager
 from src.providers import (
     create_fallback_llm,
@@ -40,6 +41,7 @@ from src.providers import (
     get_tts,
     get_vad,
 )
+from src.telephony.recording import start_call_recording
 
 logger = logging.getLogger("posivex.session")
 load_dotenv()
@@ -205,7 +207,7 @@ def _settings_for_call(base: Settings | None, call_request: CallRequest) -> Sett
 async def run_agent_session(
     ctx: JobContext,
     settings: Settings | None = None,
-    recorder: CallRecorder | None = None,
+    recorder: CallRecorder | RemoteRecorder | None = None,
 ) -> None:
     """Core entrypoint execution flow for an individual call session."""
     # Ensure room connection is established so room and remote participants are available
@@ -233,11 +235,21 @@ async def run_agent_session(
     started_at = time.monotonic()
 
     # Persistence: the worker owns its engine (asyncpg pools are event-loop bound) and writes
-    # best-effort so a database problem can never take down a live call.
+    # best-effort so a database problem can never take down a live call. An agent hosted on LiveKit
+    # Cloud cannot reach the database, so it reports the finished call to the API instead.
     engine: AsyncEngine | None = None
     if recorder is None:
-        engine = get_engine(resolved_settings.database_url)
-        recorder = CallRecorder(get_sessionmaker(engine))
+        if resolved_settings.results_callback_url:
+            recorder = RemoteRecorder(resolved_settings.results_callback_url, resolved_settings.results_callback_secret)
+        else:
+            engine = get_engine(resolved_settings.database_url)
+            recorder = CallRecorder(get_sessionmaker(engine))
+
+    # The agent id lead-gen dialed with (or the persona's own) is echoed back in the post-call webhook.
+    agent_entry = resolved_settings.agent_for_id(call_request.agent_id) or resolved_settings.agent_for_persona(
+        call_request.persona
+    )
+    reported_agent_id = call_request.agent_id or agent_entry.agent_id
 
     async def persist(label: str, coro: Awaitable[Any]) -> Any:
         try:
@@ -294,6 +306,12 @@ async def run_agent_session(
         task = asyncio.create_task(coro)
         background_tasks.add(task)
         task.add_done_callback(background_tasks.discard)
+
+    async def begin_recording() -> None:
+        """Record the call to the configured bucket; never allowed to disturb the call itself."""
+        info = await start_call_recording(ctx.api, ctx.room.name, call_id, resolved_settings.recording)
+        if info:
+            await persist("recording", recorder.record_recording(call_id, info))
 
     async def broadcast_telemetry(event_type: str, payload: dict[str, Any]) -> None:
         """Broadcast real-time state and metrics to the frontend over WebRTC data channel."""
@@ -482,9 +500,7 @@ async def run_agent_session(
     session.on("close", handle_close)
 
     # Resolve webhook outbox destination URL
-    webhook_destination = resolved_settings.webhook.lead_gen_base_url
-    if webhook_destination and "/api/webhooks" not in webhook_destination:
-        webhook_destination = f"{webhook_destination.rstrip('/')}/api/webhooks/elevenlabs"
+    webhook_destination = resolved_settings.webhook_destination()
 
     signals = CallSignals()
     finalized = False
@@ -532,6 +548,8 @@ async def run_agent_session(
                     total_cost=cost_accumulator.total_cost,
                     charging_details=cost_accumulator.get_charging_breakdown(),
                     destination_url=webhook_destination,
+                    agent_id=reported_agent_id,
+                    agent_name=agent_entry.name,
                 ),
             )
         finally:
@@ -590,6 +608,7 @@ async def run_agent_session(
                 end_call("no_answer", drain=False)
                 return False
             logger.info("SIP callee answered (%s).", callee.identity)
+            spawn(begin_recording())
             return True
 
         if conv_cfg.amd_enabled:
@@ -634,6 +653,7 @@ async def run_agent_session(
             return
     else:
         logger.info("Non-SIP participant joined (%s).", callee.identity)
+        spawn(begin_recording())
 
     if termination["reason"]:
         return

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
 
 from src.db.models import (
     Call,
@@ -19,8 +20,13 @@ from src.db.models import (
     WebhookOutbox,
     WebhookStatus,
 )
+from src.webhook.payload import build_post_call_payload, call_successful_for
 
 logger = logging.getLogger("posivex.persistence.recorder")
+
+# A call that has been "active" for longer than this is treated as abandoned (the worker died without
+# finalizing it), so it cannot block the concurrency limit forever.
+STALE_ACTIVE_CALL_SECS = 30 * 60
 
 
 class CallRecorder:
@@ -88,6 +94,7 @@ class CallRecorder:
         event_type: str,
         state: str | None = None,
         payload: dict[str, Any] | None = None,
+        timestamp: datetime | None = None,
     ) -> CallEvent:
         """Record a state machine transition or operational event."""
         async with self.session_factory() as session:
@@ -96,7 +103,7 @@ class CallRecorder:
                 event_type=event_type,
                 state=state,
                 payload=payload or {},
-                timestamp=datetime.now(UTC),
+                timestamp=timestamp or datetime.now(UTC),
             )
             session.add(event)
             await session.commit()
@@ -184,12 +191,14 @@ class CallRecorder:
         termination_reason: str = "normal_completion",
         call_outcome: str = "other",
         outcome_rationale: str = "",
-        call_successful: str = "unclear",
-        transcript_summary: str = "",
+        call_successful: str | None = None,
+        transcript_summary: str | None = "",
         charging_details: dict[str, Any] | None = None,
         total_cost: float = 0.0,
         destination_url: str | None = None,
         create_outbox: bool = True,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> tuple[Call, WebhookOutbox | None]:
         """Finalize call metadata and transactionally stage webhook outbox payload."""
         async with self.session_factory() as session:
@@ -207,39 +216,32 @@ class CallRecorder:
             call.termination_reason = termination_reason
             call.call_outcome = call_outcome
             call.outcome_rationale = outcome_rationale
-            call.call_successful = call_successful
-            call.transcript_summary = transcript_summary
+            call.call_successful = call_successful or call_successful_for(call_outcome)
+            call.transcript_summary = transcript_summary or ""
             call.charging_details = charging_details or {}
             call.total_cost = round(total_cost, 4)
             call.updated_at = now
 
             outbox_entry: WebhookOutbox | None = None
             if create_outbox and destination_url:
-                outbox_payload = {
-                    "type": "post_call_transcription",
-                    "event_timestamp": int(now.timestamp()),
-                    "data": {
-                        "conversation_id": call.id,
-                        "status": "done",
-                        "agent_name": f"Posivex - 5 - {call.persona.capitalize()}",
-                        "analysis": {
-                            "data_collection_results": {
-                                "call_outcome": {
-                                    "value": call_outcome,
-                                    "rationale": outcome_rationale,
-                                }
-                            },
-                            "transcript_summary": transcript_summary,
-                            "call_successful": call_successful,
-                        },
-                        "metadata": {
-                            "call_duration_secs": int(duration_secs),
-                            "termination_reason": termination_reason,
-                            "cost": round(total_cost, 4),
-                            "charging": charging_details or {},
-                        },
-                    },
-                }
+                transcripts = (
+                    await session.execute(
+                        select(Transcript).where(Transcript.call_id == call.id).order_by(Transcript.id)
+                    )
+                ).scalars().all()
+                events = (
+                    await session.execute(
+                        select(CallEvent).where(CallEvent.call_id == call.id).order_by(CallEvent.id)
+                    )
+                ).scalars().all()
+                outbox_payload = build_post_call_payload(
+                    call,
+                    transcripts,
+                    events,
+                    event_timestamp=int(now.timestamp()),
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                )
 
                 outbox_entry = WebhookOutbox(
                     id=f"outbox_{uuid.uuid4().hex[:16]}",
@@ -266,13 +268,51 @@ class CallRecorder:
             return res.scalar_one_or_none()
 
     async def get_active_calls_count(self) -> int:
-        """Count currently active calls (queued or in progress)."""
+        """Count calls that are queued or in progress and not abandoned (started within the stale window)."""
+        cutoff = datetime.now(UTC) - timedelta(seconds=STALE_ACTIVE_CALL_SECS)
         async with self.session_factory() as session:
             stmt = select(Call).where(
-                Call.status.in_([CallStatus.QUEUED.value, CallStatus.IN_PROGRESS.value])
+                Call.status.in_([CallStatus.QUEUED.value, CallStatus.IN_PROGRESS.value]),
+                Call.created_at >= cutoff,
             )
             res = await session.execute(stmt)
             return len(res.scalars().all())
+
+    async def get_transcripts(self, call_id: str) -> list[Transcript]:
+        async with self.session_factory() as session:
+            res = await session.execute(
+                select(Transcript).where(Transcript.call_id == call_id).order_by(Transcript.id)
+            )
+            return list(res.scalars().all())
+
+    async def get_events(self, call_id: str) -> list[CallEvent]:
+        async with self.session_factory() as session:
+            res = await session.execute(
+                select(CallEvent).where(CallEvent.call_id == call_id).order_by(CallEvent.id)
+            )
+            return list(res.scalars().all())
+
+    async def list_calls_since(self, since: datetime, limit: int = 100) -> list[Call]:
+        """Calls that started at or after `since`, newest first."""
+        async with self.session_factory() as session:
+            res = await session.execute(
+                select(Call).where(Call.started_at >= since).order_by(Call.started_at.desc()).limit(limit)
+            )
+            return list(res.scalars().all())
+
+    async def merge_call_metadata(self, call_id: str, updates: dict[str, Any]) -> None:
+        """Merge keys into the call's metadata_json (e.g. the recording location)."""
+        async with self.session_factory() as session:
+            call = (await session.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
+            if call is None:
+                return
+            call.metadata_json = {**(call.metadata_json or {}), **updates}
+            flag_modified(call, "metadata_json")
+            await session.commit()
+
+    async def record_recording(self, call_id: str, info: dict[str, Any]) -> None:
+        """Remember where the call's audio was written (bucket, key, file type)."""
+        await self.merge_call_metadata(call_id, {"recording": info})
 
     async def update_call_status(
         self,

@@ -94,6 +94,30 @@ webhook:
   max_retries: 10
   retry_backoff_base: 2.0
 
+# Agent ids lead-gen may dial with, and the persona (prompt) behind each. An id that is not listed here
+# (for example an old ElevenLabs agent) is served by Amelia.
+agents:
+  - agent_id: "agent_2701m6e2fw2eehd97r93d4v8x9yc"
+    name: "Posivex - 6 - Amelia - Single Master Prompt"
+    persona: "amelia"
+  - agent_id: "agent_posivex_michael"
+    name: "Posivex - Michael"
+    persona: "michael"
+
+# Calling numbers lead-gen can choose. All of them dial through the one SIP trunk (SIP_OUTBOUND_TRUNK_ID).
+# Env: VOICE_PHONE_NUMBER_ID / VOICE_PHONE_NUMBER replace this list with a single entry.
+phone_numbers:
+  - phone_number_id: "phnum_posivex_trunk"
+    phone_number: ""
+    label: "Posivex SIP trunk"
+
+# Call recording through LiveKit egress to an S3-compatible bucket. Env: RECORDING_ENABLED, RECORDING_BUCKET,
+# RECORDING_REGION, RECORDING_ENDPOINT, RECORDING_ACCESS_KEY, RECORDING_SECRET, RECORDING_PREFIX.
+recording:
+  enabled: false
+  prefix: "recordings"
+  file_type: "ogg"
+
 telephony:
   provider: "mock"
   sip_trunk_id: null

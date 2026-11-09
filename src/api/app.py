@@ -11,7 +11,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.api.routes import calls_router, convai_router, health_router
+from src.api.routes import (
+    calls_router,
+    convai_read_router,
+    convai_router,
+    health_router,
+    internal_router,
+)
 from src.config import Settings, load_settings
 from src.db.base import get_engine, get_sessionmaker
 from src.metrics.prometheus import get_latest_metrics
@@ -76,6 +82,8 @@ def create_app(
     app.include_router(health_router)
     app.include_router(calls_router)
     app.include_router(convai_router)
+    app.include_router(convai_read_router)
+    app.include_router(internal_router)
 
     @app.get("/metrics", tags=["Metrics"])
     async def metrics_endpoint() -> Response:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import cast
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -54,8 +55,9 @@ def verify_xi_api_key(
             detail="Invalid or missing xi-api-key",
         )
 
-    # If an elevenlabs_api_key is configured, enforce strict match
-    if settings.elevenlabs_api_key and xi_api_key != settings.elevenlabs_api_key:
+    # A dedicated POSIVEX_API_KEY wins; otherwise the ElevenLabs key doubles as the shared key.
+    expected = settings.voice_api_key or settings.elevenlabs_api_key
+    if expected and not hmac.compare_digest(xi_api_key, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing xi-api-key",
@@ -63,3 +65,18 @@ def verify_xi_api_key(
 
     return xi_api_key
 
+
+
+def verify_callback_secret(
+    x_posivex_callback_secret: str | None = Header(None, alias="X-Posivex-Callback-Secret"),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Authenticate a LiveKit Cloud-hosted agent reporting a finished call."""
+    expected = settings.results_callback_secret
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Results callback is not configured (RESULTS_CALLBACK_SECRET)",
+        )
+    if not x_posivex_callback_secret or not hmac.compare_digest(x_posivex_callback_secret, expected):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid callback secret")

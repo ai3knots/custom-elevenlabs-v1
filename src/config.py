@@ -157,6 +157,40 @@ class TelephonyConfig(BaseModel):
     max_concurrent_calls: int = 50
 
 
+class AgentEntry(BaseModel):
+    """An agent id that lead-gen can dial with, and the persona (prompt) that serves it."""
+
+    agent_id: str
+    name: str
+    persona: Literal["amelia", "michael"] = "amelia"
+
+
+class PhoneNumberEntry(BaseModel):
+    """A calling number lead-gen can pick. Every entry dials through the one configured SIP trunk."""
+
+    phone_number_id: str
+    phone_number: str = ""
+    label: str = "Posivex SIP trunk"
+
+
+class RecordingConfig(BaseModel):
+    """Call recording: LiveKit egress writes audio to an S3-compatible bucket, the API streams it back."""
+
+    enabled: bool = False
+    bucket: str = ""
+    region: str = "us-east-1"
+    endpoint: str = ""  # blank for AWS S3; set for R2, MinIO, Wasabi and similar
+    access_key: str = ""
+    secret: str = ""
+    force_path_style: bool = False
+    prefix: str = "recordings"
+    file_type: Literal["ogg", "mp3"] = "ogg"
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.enabled and self.bucket and self.access_key and self.secret)
+
+
 class Settings(BaseSettings):
     """Global application settings with layered resolution."""
 
@@ -187,6 +221,48 @@ class Settings(BaseSettings):
     kb: KBConfig = Field(default_factory=KBConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     telephony: TelephonyConfig = Field(default_factory=TelephonyConfig)
+    recording: RecordingConfig = Field(default_factory=RecordingConfig)
+
+    # Lead-gen integration (the ElevenLabs-compatible API)
+    agents: list[AgentEntry] = Field(
+        default_factory=lambda: [
+            AgentEntry(
+                agent_id="agent_2701m6e2fw2eehd97r93d4v8x9yc",
+                name="Posivex - 6 - Amelia - Single Master Prompt",
+                persona="amelia",
+            ),
+            AgentEntry(agent_id="agent_posivex_michael", name="Posivex - Michael", persona="michael"),
+        ]
+    )
+    phone_numbers: list[PhoneNumberEntry] = Field(
+        default_factory=lambda: [PhoneNumberEntry(phone_number_id="phnum_posivex_trunk")]
+    )
+    # xi-api-key lead-gen must send. Empty: fall back to elevenlabs_api_key, then accept any non-empty key.
+    voice_api_key: str = ""
+
+    # Where a LiveKit Cloud-hosted agent reports the finished call (the API on your server). Empty: the
+    # agent writes to the database directly, as when it runs on the same host as Postgres.
+    results_callback_url: str = ""
+    results_callback_secret: str = ""
+
+    def webhook_destination(self) -> str:
+        """Full URL of lead-gen's post-call webhook (a bare base URL gets the standard path appended)."""
+        url = self.webhook.lead_gen_base_url
+        if url and "/api/webhooks" not in url:
+            url = f"{url.rstrip('/')}/api/webhooks/elevenlabs"
+        return url
+
+    def agent_for_id(self, agent_id: str | None) -> AgentEntry | None:
+        return next((a for a in self.agents if a.agent_id == agent_id), None) if agent_id else None
+
+    def persona_for_agent(self, agent_id: str | None, default: str = "amelia") -> str:
+        """Persona that serves `agent_id`; unknown ids (for example an old ElevenLabs agent) use `default`."""
+        entry = self.agent_for_id(agent_id)
+        return entry.persona if entry else default
+
+    def agent_for_persona(self, persona: str) -> AgentEntry:
+        """The agent entry advertised for a persona (the first match, else the first entry)."""
+        return next((a for a in self.agents if a.persona == persona), self.agents[0])
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -236,6 +312,10 @@ class CallRequest(BaseModel):
         # Handle ElevenLabs to_number alias
         if not values.get("phone") and values.get("to_number"):
             values["phone"] = values["to_number"]
+
+        # ElevenLabs names the calling number agent_phone_number_id
+        if not values.get("phone_number_id") and values.get("agent_phone_number_id"):
+            values["phone_number_id"] = values["agent_phone_number_id"]
 
         # Handle ElevenLabs nested conversation_initiation_client_data.dynamic_variables
         if values.get("conversation_initiation_client_data") and not values.get("dynamic_variables"):
@@ -318,6 +398,38 @@ def load_settings(
     webhook_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
     if webhook_secret:
         merged.setdefault("webhook", {})["webhook_secret"] = webhook_secret
+
+    # Lead-gen integration and recording
+    for env_var, field_name in (
+        ("POSIVEX_API_KEY", "voice_api_key"),
+        ("RESULTS_CALLBACK_URL", "results_callback_url"),
+        ("RESULTS_CALLBACK_SECRET", "results_callback_secret"),
+    ):
+        env_val = os.getenv(env_var)
+        if env_val:
+            merged[field_name] = env_val
+    for env_var, field_name in (
+        ("RECORDING_BUCKET", "bucket"),
+        ("RECORDING_REGION", "region"),
+        ("RECORDING_ENDPOINT", "endpoint"),
+        ("RECORDING_ACCESS_KEY", "access_key"),
+        ("RECORDING_SECRET", "secret"),
+        ("RECORDING_PREFIX", "prefix"),
+    ):
+        env_val = os.getenv(env_var)
+        if env_val:
+            merged.setdefault("recording", {})[field_name] = env_val
+    if os.getenv("RECORDING_ENABLED"):
+        merged.setdefault("recording", {})["enabled"] = os.getenv("RECORDING_ENABLED", "").lower() == "true"
+    if os.getenv("RECORDING_FORCE_PATH_STYLE"):
+        merged.setdefault("recording", {})["force_path_style"] = (
+            os.getenv("RECORDING_FORCE_PATH_STYLE", "").lower() == "true"
+        )
+    phone_id, phone_number = os.getenv("VOICE_PHONE_NUMBER_ID"), os.getenv("VOICE_PHONE_NUMBER")
+    if phone_id or phone_number:
+        merged["phone_numbers"] = [
+            {"phone_number_id": phone_id or "phnum_posivex_trunk", "phone_number": phone_number or ""}
+        ]
 
     # LLM model overrides from env, so latency experiments need no rebuild
     for env_var, field_name in (

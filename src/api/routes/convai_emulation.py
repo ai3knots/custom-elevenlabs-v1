@@ -52,6 +52,9 @@ async def _handle_emulated_outbound_call(
             detail="Maximum concurrent calls limit reached",
         )
 
+    # Lead-gen picks an agent by id; the persona (prompt) behind that id decides who speaks.
+    request.persona = settings.persona_for_agent(request.agent_id, default=request.persona)  # type: ignore[assignment]
+
     # 2. Identifier generation matching ElevenLabs conv_ prefix
     conversation_id = request.call_id or f"conv_{uuid.uuid4().hex[:14]}"
     room_name = f"call_{conversation_id}"

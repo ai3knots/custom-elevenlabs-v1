@@ -220,26 +220,74 @@ WHERE status = 'dead_letter';
 
 ---
 
-## 7. Zero-Code-Change Posivex-Lead-Gen Integration
+## 7. Posivex-Lead-Gen Integration
 
-To route calls through this service instead of ElevenLabs:
+Lead-gen keeps using its ElevenLabs client. Setting `ELEVENLABS_API_BASE_URL` points that client at this service's
+ElevenLabs-compatible API instead of `https://api.elevenlabs.io` (this needs the lead-gen change on branch
+`feat/voice-api-base-url`; before it, the URL was hard-coded and no setting could redirect it).
 
-1. In `Posivex-lead-gen/.env.local`:
-   ```bash
-   # Point ElevenLabs API base URL to this service
-   ELEVENLABS_API_BASE_URL="http://localhost:8000"
-   ELEVENLABS_WEBHOOK_SECRET="posivex_secret_123"
-   ```
-2. No TypeScript code changes are required in `Posivex-lead-gen`.
-3. Calls dispatched to `/v1/convai/sip-trunk/outbound-call` or `/v1/convai/twilio/outbound-call` will automatically route to LiveKit SIP trunks.
-4. Post-call webhooks received by `Posivex-lead-gen/src/app/api/webhooks/elevenlabs/route.ts` will verify the HMAC signature and process transcripts normally.
+### 7.1 What the API provides
 
----
+| Lead-gen calls | Handled by |
+|---|---|
+| `POST /v1/convai/sip-trunk/outbound-call` (and `/twilio/`) | `convai_emulation.py`: creates the call row, picks the persona from `agent_id`, dials through LiveKit |
+| `GET /v1/convai/agents`, `GET /v1/convai/phone-numbers` | `convai_read.py`: the agents and numbers from `config/defaults.yaml` (`agents:`, `phone_numbers:`) |
+| `GET /v1/convai/conversations`, `/{id}` | `convai_read.py`: the same conversation shape ElevenLabs returns (transcript, tool calls, metadata, analysis) |
+| `GET /v1/convai/conversations/{id}/audio` | `convai_read.py`: streams the recording from the bucket (404 until a recording exists) |
+| Post-call webhook (we call lead-gen) | outbox worker: signed `t=...,v0=...`, full `data` object built by `src/webhook/payload.py` |
+
+All of them need the `xi-api-key` header, which must equal `POSIVEX_API_KEY` (or `ELEVENLABS_API_KEY` when that is unset).
+
+An `agent_id` that is not listed in `agents:` (for example an old ElevenLabs agent) is served by Amelia. The master-prompt agent
+`agent_2701m6e2fw2eehd97r93d4v8x9yc` is Amelia; `agent_posivex_michael` is Michael.
+
+### 7.2 Settings
+
+On this service (`.env`):
+
+| Variable | Purpose |
+|---|---|
+| `POSIVEX_API_KEY` | Key lead-gen sends as `xi-api-key` (any long random value) |
+| `LEAD_GEN_WEBHOOK_URL` | Lead-gen's public URL, for example `https://xyz.thebestdevsolutions.space` (the webhook path is added). The default `http://localhost:3000` is wrong for production |
+| `ELEVENLABS_WEBHOOK_SECRET` | Must equal lead-gen's `ELEVENLABS_WEBHOOK_SECRET` |
+| `VOICE_PHONE_NUMBER_ID` / `VOICE_PHONE_NUMBER` | The calling number lead-gen shows and stores (default id `phnum_posivex_trunk`) |
+| `RESULTS_CALLBACK_URL` / `RESULTS_CALLBACK_SECRET` | Only for an agent that cannot reach Postgres (LiveKit Cloud): the API's public URL and a shared secret. Leave unset when the agent runs next to the database |
+| `RECORDING_ENABLED`, `RECORDING_BUCKET`, `RECORDING_REGION`, `RECORDING_ENDPOINT`, `RECORDING_ACCESS_KEY`, `RECORDING_SECRET`, `RECORDING_PREFIX` | Call recording (below) |
+
+On lead-gen (`.env.server`):
+
+```
+ELEVENLABS_API_BASE_URL=https://<voice-api-host>     # or http://127.0.0.1:8000 when it runs on the same machine
+VOICE_API_KEY=<the same value as POSIVEX_API_KEY>
+ELEVENLABS_WEBHOOK_SECRET=<the same value as on this service>
+AGENT_ID=agent_2701m6e2fw2eehd97r93d4v8x9yc          # or pick the agent in Settings
+AGENT_PHONE_NUMBER_ID=phnum_posivex_trunk            # or pick the number in Settings
+```
+
+### 7.3 Results callback (agent without database access)
+
+When `RESULTS_CALLBACK_URL` is set the agent keeps the transcript, tool events, usage and recording location in memory and
+sends them once at the end of the call to `POST /internal/calls/{id}/result` (header `X-Posivex-Callback-Secret`, 4 attempts
+with backoff). The API stores them and stages the webhook for lead-gen, so the outbox keeps its retries. A repeat of the same
+report is ignored. Expose only `/internal/` and `/v1/convai/` through the reverse proxy, never the rest of the API.
+
+### 7.4 Call recording
+
+LiveKit egress records the call (audio only) to an S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Wasabi...) from the moment
+the callee answers. The file appears shortly after the call ends; the API streams it for lead-gen's recording player.
+It is off until `RECORDING_ENABLED=true` and the bucket settings are present. Egress minutes are billed by LiveKit separately
+from agent minutes. Not yet tested against a real bucket.
+
+### 7.5 Checks before the first campaign
+
+1. `curl -H "xi-api-key: $POSIVEX_API_KEY" $BASE/v1/convai/agents` returns the two agents.
+2. Lead-gen Settings lists the agents and the number; one manual call completes and its call page shows the transcript and outcome.
+3. Keep `DISABLE_REAL_CALLS=true` on lead-gen until step 2 works, then switch it to `false` for a one-lead campaign.
 
 ## 8. Rollback Procedure
 
 If any issue arises:
-1. Revert `ELEVENLABS_API_BASE_URL` in `Posivex-lead-gen/.env.local` to `https://api.elevenlabs.io`.
-2. Revert `ELEVENLABS_WEBHOOK_SECRET` to the original ElevenLabs signing secret.
-3. Restart `Posivex-lead-gen`. Production traffic immediately reverts to ElevenLabs.
+1. Remove `ELEVENLABS_API_BASE_URL` and `VOICE_API_KEY` from lead-gen's environment (the default is ElevenLabs).
+2. Restore `ELEVENLABS_WEBHOOK_SECRET` to the original ElevenLabs signing secret if you changed it.
+3. Restart `Posivex-lead-gen`. New calls go through ElevenLabs again; calls already placed through this service still finish and report.
 

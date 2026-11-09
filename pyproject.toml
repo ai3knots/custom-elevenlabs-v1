@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
     "httpx>=0.28.1",
     "prometheus-client>=0.26.0",
+    "boto3>=1.43.126",
 ]
 
 [dependency-groups]
