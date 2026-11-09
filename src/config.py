@@ -170,7 +170,7 @@ class PhoneNumberEntry(BaseModel):
 
     phone_number_id: str
     phone_number: str = ""
-    label: str = "Posivex SIP trunk"
+    label: str = "Posivex LiveKit number"
 
 
 class RecordingConfig(BaseModel):
@@ -226,12 +226,8 @@ class Settings(BaseSettings):
     # Lead-gen integration (the ElevenLabs-compatible API)
     agents: list[AgentEntry] = Field(
         default_factory=lambda: [
-            AgentEntry(
-                agent_id="agent_2701m6e2fw2eehd97r93d4v8x9yc",
-                name="Posivex - 6 - Amelia - Single Master Prompt",
-                persona="amelia",
-            ),
-            AgentEntry(agent_id="agent_posivex_michael", name="Posivex - Michael", persona="michael"),
+            AgentEntry(agent_id="agent_posivex_amelia", name="Posivex LiveKit - Amelia", persona="amelia"),
+            AgentEntry(agent_id="agent_posivex_michael", name="Posivex LiveKit - Michael", persona="michael"),
         ]
     )
     phone_numbers: list[PhoneNumberEntry] = Field(

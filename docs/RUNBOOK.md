@@ -245,8 +245,11 @@ ElevenLabs-compatible API instead of `https://api.elevenlabs.io` (this needs the
 
 All of them need the `xi-api-key` header, which must equal `POSIVEX_API_KEY` (or `ELEVENLABS_API_KEY` when that is unset).
 
-An `agent_id` that is not listed in `agents:` (for example an old ElevenLabs agent) is served by Amelia. The master-prompt agent
-`agent_2701m6e2fw2eehd97r93d4v8x9yc` is Amelia; `agent_posivex_michael` is Michael.
+An `agent_id` that is not listed in `agents:` (for example an old ElevenLabs agent) is served by Amelia. `agent_posivex_amelia`
+("Posivex LiveKit - Amelia") is Amelia; `agent_posivex_michael` ("Posivex LiveKit - Michael") is Michael. These ids are our own on
+purpose: lead-gen lists ElevenLabs agents and ours in one dropdown, so an id shared with an ElevenLabs agent (the earlier default
+reused `agent_2701m6e2fw2eehd97r93d4v8x9yc`) cannot be told apart there. Moving a campaign between providers means choosing the other
+agent, not editing `VOICE_API_AGENT_IDS`.
 
 ### 7.2 Settings
 
@@ -266,7 +269,7 @@ On lead-gen (`.env.server`), see `docs/voice-provider.md` in that repo:
 ```
 ELEVENLABS_API_BASE_URL=http://127.0.0.1:8000        # this service's API (same machine), or its public URL
 VOICE_API_KEY=<the same value as POSIVEX_API_KEY>
-VOICE_API_AGENT_IDS=agent_2701m6e2fw2eehd97r93d4v8x9yc   # ONLY these agents use this service; everything else stays on ElevenLabs
+VOICE_API_AGENT_IDS=agent_posivex_amelia,agent_posivex_michael   # ONLY these agents use this service; everything else stays on ElevenLabs
 VOICE_WEBHOOK_SECRET=<the same value as ELEVENLABS_WEBHOOK_SECRET on this service>
 ```
 

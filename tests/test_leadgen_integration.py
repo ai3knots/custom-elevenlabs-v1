@@ -21,7 +21,7 @@ from src.persistence.remote import RemoteRecorder
 from src.telephony.mock import MockTelephonyProvider
 from src.telephony.recording import recording_key, start_call_recording
 
-MASTER_AGENT = "agent_2701m6e2fw2eehd97r93d4v8x9yc"
+MASTER_AGENT = "agent_posivex_amelia"
 MICHAEL_AGENT = "agent_posivex_michael"
 HEADERS = {"xi-api-key": "voice-key"}
 CALLBACK = {"X-Posivex-Callback-Secret": "cb-secret"}
