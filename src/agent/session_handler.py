@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
 from dotenv import load_dotenv
@@ -138,8 +138,15 @@ def prewarm_process(proc: JobProcess) -> None:
         logger.exception("Could not prewarm the VAD model; it will be loaded per call.")
 
 
-async def _wait_for_answer(callee: rtc.RemoteParticipant, timeout: float) -> str:
-    """Wait for sip.callStatus to become 'active'. Returns 'active', 'hangup' or 'timeout'."""
+async def _wait_for_answer(
+    callee: rtc.RemoteParticipant, timeout: float, is_gone: Callable[[], bool] = lambda: False
+) -> str:
+    """Wait for sip.callStatus to become 'active'.
+
+    Returns 'active', 'hangup', 'disconnected' (the callee left the room while still ringing, for example
+    by declining) or 'timeout'. A declined call never publishes a final status, so without `is_gone` this
+    kept polling for the whole ring timeout and held the job open after the call was over.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         status = callee.attributes.get("sip.callStatus")
@@ -147,6 +154,8 @@ async def _wait_for_answer(callee: rtc.RemoteParticipant, timeout: float) -> str
             return "active"
         if status == "hangup":
             return "hangup"
+        if is_gone():
+            return "disconnected"
         await asyncio.sleep(0.5)
     return "timeout"
 
@@ -397,6 +406,8 @@ async def run_agent_session(
 
     async def hang_up_after_goodbye() -> None:
         await asyncio.sleep(CLOSING_GRACE_SECS)
+        if termination["reason"]:
+            return  # end_call (or another path) is already closing the call; nothing to rescue
         if session.user_state == "speaking" or session.agent_state == "speaking":
             return
         logger.info("Goodbye was spoken without end_call; ending the call.")
@@ -503,6 +514,8 @@ async def run_agent_session(
     webhook_destination = resolved_settings.webhook_destination()
 
     signals = CallSignals()
+    # Whether this is a phone call, and whether the callee ever picked up (set once the callee joins).
+    call_flags = {"sip": False, "answered": False}
     finalized = False
     guard_task: asyncio.Task[None] | None = None
 
@@ -521,6 +534,10 @@ async def run_agent_session(
         if call_state.voicemail_detected and not signals.forced_outcome:
             signals.forced_outcome = "voicemail"
             signals.forced_rationale = "The agent detected a voicemail or recorded message."
+        if call_flags["sip"] and not call_flags["answered"] and not signals.forced_outcome:
+            # The phone leg ended while still ringing (declined, busy, network refusal): not a conversation.
+            signals.forced_outcome = "no_answer"
+            signals.forced_rationale = "The callee did not answer (the call was rejected or dropped while ringing)."
 
         async def classify(transcript: list[Any], sig: CallSignals) -> Any:
             return await classify_transcript(
@@ -597,16 +614,22 @@ async def run_agent_session(
         or callee.identity.startswith("phone_")
     )
 
+    call_flags["sip"] = is_sip
     if is_sip:
         session.room_io.set_participant(callee.identity)
 
         async def callee_answered() -> bool:
-            answer = await _wait_for_answer(callee, conv_cfg.ring_timeout_seconds)
+            answer = await _wait_for_answer(
+                callee,
+                conv_cfg.ring_timeout_seconds,
+                is_gone=lambda: callee.identity not in ctx.room.remote_participants,
+            )
             if answer != "active":
                 logger.warning("Callee did not answer (%s).", answer)
                 signals.forced_outcome, signals.forced_rationale = "no_answer", f"Call not answered ({answer})."
                 end_call("no_answer", drain=False)
                 return False
+            call_flags["answered"] = True
             logger.info("SIP callee answered (%s).", callee.identity)
             spawn(begin_recording())
             return True
@@ -653,6 +676,7 @@ async def run_agent_session(
             return
     else:
         logger.info("Non-SIP participant joined (%s).", callee.identity)
+        call_flags["answered"] = True
         spawn(begin_recording())
 
     if termination["reason"]:
