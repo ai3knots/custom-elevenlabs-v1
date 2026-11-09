@@ -185,7 +185,7 @@ async def test_convai_emulation_authentication(test_env: Any) -> None:
         assert resp_ok.status_code == 200
         res_data = resp_ok.json()
         assert res_data["success"] is True
-        assert res_data["conversation_id"].startswith("conv_")
+        assert res_data["conversation_id"].startswith("lk_")
         assert res_data["callSid"].startswith("CA")
         assert res_data["sip_call_id"].startswith("sip_")
 

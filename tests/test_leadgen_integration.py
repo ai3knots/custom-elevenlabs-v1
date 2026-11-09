@@ -68,7 +68,9 @@ async def dial(env: SimpleNamespace, agent_id: str = MASTER_AGENT) -> str:
         },
     )
     assert res.status_code == 200, res.text
-    return str(res.json()["conversation_id"])
+    conversation_id = str(res.json()["conversation_id"])
+    assert conversation_id.startswith("lk_")  # lead-gen routes by this prefix
+    return conversation_id
 
 
 async def finish_call(env: SimpleNamespace, call_id: str, outcome: str = "callback_set") -> None:

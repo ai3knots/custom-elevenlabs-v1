@@ -55,8 +55,9 @@ async def _handle_emulated_outbound_call(
     # Lead-gen picks an agent by id; the persona (prompt) behind that id decides who speaks.
     request.persona = settings.persona_for_agent(request.agent_id, default=request.persona)  # type: ignore[assignment]
 
-    # 2. Identifier generation matching ElevenLabs conv_ prefix
-    conversation_id = request.call_id or f"conv_{uuid.uuid4().hex[:14]}"
+    # 2. Conversation id. The "lk_" prefix is how lead-gen tells our conversations from ElevenLabs' (which are
+    # "conv_..."), so it reads each one from the right provider.
+    conversation_id = request.call_id or f"lk_{uuid.uuid4().hex[:14]}"
     room_name = f"call_{conversation_id}"
     request.call_id = conversation_id
 

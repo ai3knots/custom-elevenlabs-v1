@@ -249,20 +249,24 @@ On this service (`.env`):
 |---|---|
 | `POSIVEX_API_KEY` | Key lead-gen sends as `xi-api-key` (any long random value) |
 | `LEAD_GEN_WEBHOOK_URL` | Lead-gen's public URL, for example `https://xyz.thebestdevsolutions.space` (the webhook path is added). The default `http://localhost:3000` is wrong for production |
-| `ELEVENLABS_WEBHOOK_SECRET` | Must equal lead-gen's `ELEVENLABS_WEBHOOK_SECRET` |
+| `ELEVENLABS_WEBHOOK_SECRET` | The secret this service signs webhooks with; lead-gen's `VOICE_WEBHOOK_SECRET` must equal it |
 | `VOICE_PHONE_NUMBER_ID` / `VOICE_PHONE_NUMBER` | The calling number lead-gen shows and stores (default id `phnum_posivex_trunk`) |
 | `RESULTS_CALLBACK_URL` / `RESULTS_CALLBACK_SECRET` | Only for an agent that cannot reach Postgres (LiveKit Cloud): the API's public URL and a shared secret. Leave unset when the agent runs next to the database |
 | `RECORDING_ENABLED`, `RECORDING_BUCKET`, `RECORDING_REGION`, `RECORDING_ENDPOINT`, `RECORDING_ACCESS_KEY`, `RECORDING_SECRET`, `RECORDING_PREFIX` | Call recording (below) |
 
-On lead-gen (`.env.server`):
+On lead-gen (`.env.server`), see `docs/voice-provider.md` in that repo:
 
 ```
-ELEVENLABS_API_BASE_URL=https://<voice-api-host>     # or http://127.0.0.1:8000 when it runs on the same machine
+ELEVENLABS_API_BASE_URL=http://127.0.0.1:8000        # this service's API (same machine), or its public URL
 VOICE_API_KEY=<the same value as POSIVEX_API_KEY>
-ELEVENLABS_WEBHOOK_SECRET=<the same value as on this service>
-AGENT_ID=agent_2701m6e2fw2eehd97r93d4v8x9yc          # or pick the agent in Settings
-AGENT_PHONE_NUMBER_ID=phnum_posivex_trunk            # or pick the number in Settings
+VOICE_API_AGENT_IDS=agent_2701m6e2fw2eehd97r93d4v8x9yc   # ONLY these agents use this service; everything else stays on ElevenLabs
+VOICE_WEBHOOK_SECRET=<the same value as ELEVENLABS_WEBHOOK_SECRET on this service>
 ```
+
+Nothing is routed until `VOICE_API_AGENT_IDS` lists an agent, so adding the other three variables changes no existing campaign.
+Lead-gen picks the agent per campaign, so create a new campaign with the listed agent and its number. ElevenLabs keeps signing
+with lead-gen's own `ELEVENLABS_WEBHOOK_SECRET`; lead-gen accepts a webhook signed with either secret. Conversation ids from this
+service start with `lk_`, which is how lead-gen reads each conversation and recording from the right provider.
 
 ### 7.3 Results callback (agent without database access)
 
