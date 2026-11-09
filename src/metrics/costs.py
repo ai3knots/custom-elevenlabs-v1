@@ -73,8 +73,12 @@ class CostAccumulator:
     telephony_cost: float = 0.0
     records: list[dict[str, Any]] = field(default_factory=list)
 
-    def add_llm_usage(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        """Record input and output tokens for an LLM generation."""
+    def add_llm_usage(self, model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> float:
+        """Record input and output tokens for an LLM generation.
+
+        `cached_tokens` is the part of `input_tokens` the provider served from its prompt cache. It is stored as
+        its own informational row (no cost) so the cache hit rate can be read back per call.
+        """
         cost_in = calculate_cost("google", model, "tokens_input", float(input_tokens))
         cost_out = calculate_cost("google", model, "tokens_output", float(output_tokens))
         cost = round(cost_in + cost_out, 6)
@@ -98,6 +102,16 @@ class CostAccumulator:
                 "estimated_cost_usd": cost_out,
             }
         )
+        if cached_tokens > 0:
+            self.records.append(
+                {
+                    "provider": "google",
+                    "model": model,
+                    "metric_type": "tokens_input_cached",
+                    "metric_value": float(cached_tokens),
+                    "estimated_cost_usd": 0.0,
+                }
+            )
         return cost
 
     def add_tts_usage(self, model: str, characters_count: int) -> float:

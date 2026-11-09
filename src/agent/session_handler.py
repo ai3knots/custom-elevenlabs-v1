@@ -92,7 +92,18 @@ def _usage_into_costs(session: AgentSession, costs: CostAccumulator, duration_se
     try:
         for usage in session.usage.model_usage:
             if isinstance(usage, LLMModelUsage):
-                costs.add_llm_usage(usage.model, usage.input_tokens, usage.output_tokens)
+                costs.add_llm_usage(
+                    usage.model, usage.input_tokens, usage.output_tokens, cached_tokens=usage.input_cached_tokens
+                )
+                if usage.input_tokens:
+                    logger.info(
+                        "LLM usage: model=%s input=%d cached=%d (%.0f%%) output=%d",
+                        usage.model,
+                        usage.input_tokens,
+                        usage.input_cached_tokens,
+                        usage.input_cached_tokens / usage.input_tokens * 100,
+                        usage.output_tokens,
+                    )
             elif isinstance(usage, TTSModelUsage):
                 costs.add_tts_usage(usage.model, usage.characters_count)
             elif isinstance(usage, STTModelUsage):
