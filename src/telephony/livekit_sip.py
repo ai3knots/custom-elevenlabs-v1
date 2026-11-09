@@ -37,7 +37,10 @@ class LiveKitSIPProvider(TelephonyProvider):
     async def dial(self, request: CallRequest, room_name: str) -> DispatchResult:
         lkapi = self._get_api()
         call_id = request.call_id or f"conv_{uuid.uuid4().hex[:14]}"
-        trunk_id = request.phone_number_id or self._settings.telephony.sip_trunk_id
+        # Lead-gen sends its own calling-number id (for example "phnum_posivex_trunk"), which is not a LiveKit
+        # trunk id. Only an explicit LiveKit trunk id ("ST_...") overrides the configured trunk.
+        requested = request.phone_number_id if (request.phone_number_id or "").startswith("ST_") else None
+        trunk_id = requested or self._settings.telephony.sip_trunk_id
 
         if not trunk_id:
             raise ValueError("No SIP trunk ID configured or provided in call request")

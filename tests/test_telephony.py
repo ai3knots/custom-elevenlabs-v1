@@ -169,3 +169,26 @@ def test_telephony_factory() -> None:
     provider_livekit = get_telephony_provider(settings_livekit)
     assert isinstance(provider_livekit, LiveKitSIPProvider)
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested", "expected"),
+    [
+        ("phnum_posivex_trunk", "ST_default_trunk"),  # lead-gen's number id is not a LiveKit trunk
+        (None, "ST_default_trunk"),
+        ("ST_explicit_trunk", "ST_explicit_trunk"),  # an explicit LiveKit trunk id still wins
+    ],
+)
+async def test_livekit_trunk_choice_ignores_leadgen_number_ids(requested: str | None, expected: str) -> None:
+    mock_lkapi = MagicMock()
+    mock_lkapi.agent_dispatch.create_dispatch = AsyncMock()
+    mock_lkapi.sip.create_sip_participant = AsyncMock(
+        return_value=api.SIPParticipantInfo(participant_id="p", sip_call_id="s")
+    )
+    settings = Settings(telephony={"provider": "livekit_sip", "sip_trunk_id": "ST_default_trunk"})  # type: ignore[arg-type]
+    provider = LiveKitSIPProvider(settings, api_client=mock_lkapi)
+
+    await provider.dial(_make_call_request(trunk_id=requested), room_name="room")
+
+    assert mock_lkapi.sip.create_sip_participant.call_args[0][0].sip_trunk_id == expected
