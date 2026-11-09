@@ -75,6 +75,12 @@ def _load_rules() -> str:
     return RULES_PATH.read_text(encoding="utf-8")
 
 
+def _make_client(api_key: str) -> Any:
+    from google import genai
+
+    return genai.Client(api_key=api_key)
+
+
 async def classify_transcript(
     transcript: list[Mapping[str, Any]],
     signals: CallSignals,
@@ -87,7 +93,9 @@ async def classify_transcript(
     if not api_key:
         raise RuntimeError("No Gemini API key for the outcome classifier.")
 
-    from google import genai
+    # Building the client loads the CA bundle (~150 ms of CPU) and this runs on the agent's event loop, so
+    # it goes to a thread instead of stalling the loop (LiveKit logs "event loop blocked" otherwise).
+    client = await asyncio.to_thread(_make_client, api_key)
     from google.genai import types
 
     schema = types.Schema(
@@ -116,7 +124,6 @@ async def classify_transcript(
     if context_lines:
         contents += "\n\nSystem notes:\n" + "\n".join(f"- {line}" for line in context_lines)
 
-    client = genai.Client(api_key=api_key)
     response = await asyncio.wait_for(
         client.aio.models.generate_content(
             model=model,

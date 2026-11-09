@@ -37,6 +37,49 @@ def _client(cfg: RecordingConfig) -> Any:
     )
 
 
+def verify_bucket_access(cfg: RecordingConfig) -> str | None:
+    """Write and delete one tiny object. Returns a short reason when the bucket cannot be used, else None.
+
+    Blocking, with short timeouts; meant for service start-up, not for a request path.
+    """
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    client = boto3.client(
+        "s3",
+        region_name=cfg.region or None,
+        endpoint_url=cfg.endpoint or None,
+        aws_access_key_id=cfg.access_key,
+        aws_secret_access_key=cfg.secret,
+        config=Config(
+            s3={"addressing_style": "path" if cfg.force_path_style else "auto"},
+            connect_timeout=5,
+            read_timeout=10,
+            retries={"max_attempts": 1},
+        ),
+    )
+    key = f"{cfg.prefix.strip('/')}/.startup-check" if cfg.prefix.strip("/") else ".startup-check"
+    try:
+        client.put_object(Bucket=cfg.bucket, Key=key, Body=b"ok")
+        client.delete_object(Bucket=cfg.bucket, Key=key)
+    except ClientError as e:
+        error = e.response.get("Error", {})
+        code = error.get("Code", "")
+        hints = {
+            "NoSuchBucket": "the bucket does not exist (check RECORDING_BUCKET)",
+            "AccessDenied": "the key is not allowed to write to this bucket",
+            "InvalidAccessKeyId": "RECORDING_ACCESS_KEY is wrong",
+            "SignatureDoesNotMatch": "RECORDING_SECRET is wrong",
+            "PermanentRedirect": "RECORDING_REGION does not match the bucket's region",
+            "AuthorizationHeaderMalformed": "RECORDING_REGION does not match the bucket's region",
+        }
+        return f"{code}: {hints.get(code, error.get('Message', 'request failed'))}"
+    except BotoCoreError as e:
+        return f"could not reach the storage endpoint ({e})"
+    return None
+
+
 async def open_recording(cfg: RecordingConfig, key: str, file_type: str = "ogg") -> RecordingStream | None:
     """Open a recording for streaming, or None when it does not exist (yet)."""
     from botocore.exceptions import ClientError

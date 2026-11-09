@@ -327,6 +327,7 @@ async def test_audio_endpoint_404_without_recording_and_streams_when_present(
     assert (await env.client.get(f"/v1/convai/conversations/{call_id}/audio", headers=HEADERS)).status_code == 404
 
     env.settings.recording = make_recording_config()
+    await finish_call(env, call_id)
     await env.recorder.record_recording(call_id, {"key": "recordings/x.ogg", "file_type": "ogg"})
 
     async def fake_open(cfg: Any, key: str, file_type: str = "ogg") -> Any:
@@ -372,3 +373,49 @@ async def test_calling_number_id_is_kept_with_the_call(env: SimpleNamespace) -> 
     assert call is not None and (call.metadata_json or {})["phone_number_id"] == "phnum_posivex_trunk"
     data = (await env.client.get(f"/v1/convai/conversations/{call_id}", headers=HEADERS)).json()
     assert data["metadata"]["phone_call"]["phone_number_id"] == "phnum_posivex_trunk"
+
+
+async def audio_detail(env: SimpleNamespace, call_id: str) -> str:
+    res = await env.client.get(f"/v1/convai/conversations/{call_id}/audio", headers=HEADERS)
+    assert res.status_code == 404
+    return str(res.json()["detail"])
+
+
+async def test_audio_404_says_why_there_is_nothing_to_play(
+    env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    call_id = await dial(env)
+    assert "turned off" in await audio_detail(env, call_id)
+
+    env.settings.recording = RecordingConfig(enabled=True)
+    assert "not fully configured" in await audio_detail(env, call_id)
+
+    env.settings.recording = make_recording_config()
+    assert "still in progress" in await audio_detail(env, call_id)
+
+    await finish_call(env, call_id)
+    assert "no recording" in await audio_detail(env, call_id)
+
+    await env.recorder.record_recording(call_id, {"key": "recordings/x.ogg", "file_type": "ogg"})
+
+    async def missing(cfg: Any, key: str, file_type: str = "ogg") -> None:
+        return None
+
+    monkeypatch.setattr("src.api.routes.convai_read.open_recording", missing)
+    assert "still being processed" in await audio_detail(env, call_id)  # the call has only just ended
+
+    async with env.sessions() as session:
+        call = (await session.execute(select(Call).where(Call.id == call_id))).scalar_one()
+        call.ended_at = datetime.now(UTC) - timedelta(hours=1)
+        await session.commit()
+    assert "missing from the bucket" in await audio_detail(env, call_id)
+
+
+async def test_deploy_preflight_contract_rejects_bad_secret_and_stores_nothing(env: SimpleNamespace) -> None:
+    """scripts/deploy_agent.py probes this endpoint: 401 for a wrong secret, 400 for a right one, no row created."""
+    url = "/internal/calls/preflight-check/result"
+    bad = await env.client.post(url, json={"transcript": "not-a-list"}, headers={"X-Posivex-Callback-Secret": "wrong"})
+    assert bad.status_code == 401
+    ok_secret = await env.client.post(url, json={"transcript": "not-a-list"}, headers=CALLBACK)
+    assert ok_secret.status_code == 400
+    assert await env.recorder.get_call("preflight-check") is None

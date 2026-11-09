@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_call_recorder, get_settings, verify_xi_api_key
 from src.config import Settings
-from src.db.models import Call
+from src.db.models import Call, CallStatus
 from src.persistence.recorder import CallRecorder
 from src.storage import open_recording
 from src.webhook.payload import build_conversation_data, conversation_status
@@ -108,6 +108,30 @@ async def get_conversation(
     )
 
 
+RECORDING_PROCESSING_SECS = 300
+
+
+def _utc(moment: datetime | None) -> datetime | None:
+    """SQLite hands back naive datetimes; they are UTC."""
+    if moment is None:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def _no_recording_reason(call: Call, key: str | None, settings: Settings) -> str | None:
+    """Why there is nothing to play for this call, in words that point at the fix; None when there is a file."""
+    cfg = settings.recording
+    if not cfg.enabled:
+        return "Recording is turned off on the voice service (RECORDING_ENABLED is not true)."
+    if not cfg.ready:
+        return "Recording is on but not fully configured (RECORDING_BUCKET, RECORDING_ACCESS_KEY, RECORDING_SECRET)."
+    if call.status in (CallStatus.QUEUED.value, CallStatus.IN_PROGRESS.value):
+        return "The call is still in progress; the recording is available after it ends."
+    if not key:
+        return "This call has no recording: it ended before the callee answered, or the recording failed to start."
+    return None
+
+
 @router.get("/conversations/{conversation_id}/audio")
 async def get_conversation_audio(
     conversation_id: str,
@@ -117,14 +141,24 @@ async def get_conversation_audio(
     call = await _require_call(conversation_id, recorder)
     recording = (call.metadata_json or {}).get("recording") or {}
     key = recording.get("key")
-    if not key or not settings.recording.ready:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recording for this conversation")
+    reason = _no_recording_reason(call, key, settings)
+    if reason:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=reason)
     try:
         stream = await open_recording(settings.recording, key, recording.get("file_type", "ogg"))
     except Exception as e:
         logger.exception("Could not open recording %s: %s", key, e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Recording storage unavailable") from e
     if stream is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not available yet")
+        ended = _utc(call.ended_at)
+        just_ended = ended is not None and (datetime.now(UTC) - ended).total_seconds() < RECORDING_PROCESSING_SECS
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "The recording is still being processed; try again in a minute."
+                if just_ended
+                else f"The recording file is missing from the bucket ({key})."
+            ),
+        )
     headers = {"Content-Length": str(stream.content_length)} if stream.content_length else {}
     return StreamingResponse(stream.chunks, media_type=stream.content_type, headers=headers)

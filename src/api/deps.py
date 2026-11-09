@@ -41,7 +41,9 @@ def get_telephony(
     """Retrieve telephony provider from application state or create standard provider."""
     if hasattr(request.app.state, "telephony_provider") and request.app.state.telephony_provider:
         return cast(TelephonyProvider, request.app.state.telephony_provider)
-    return get_telephony_provider(settings)
+    # Keep one provider for the app instead of building (and leaking) a LiveKit client per request.
+    request.app.state.telephony_provider = get_telephony_provider(settings)
+    return cast(TelephonyProvider, request.app.state.telephony_provider)
 
 
 def verify_xi_api_key(
