@@ -52,6 +52,15 @@ def parse_args() -> argparse.Namespace:
         default="Telnyx-Outbound",
         help="Human-readable trunk name (default: Telnyx-Outbound)",
     )
+    parser.add_argument(
+        "--destination-country",
+        default="us",
+        help=(
+            "ISO country code of the people being called (default: us). LiveKit then places the phone leg "
+            "in a server in that country; without it the call starts in the region of whoever makes the "
+            "dial request, which is far from the callee when the API runs elsewhere."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -79,6 +88,7 @@ async def register_trunk(args: argparse.Namespace) -> None:
         name=args.name,
         address=args.sip_host,
         numbers=[args.phone],
+        destination_country=args.destination_country,
         auth_username=args.sip_user,
         auth_password=args.sip_pass,
         # Telnyx docs: send the username in the first INVITE so Telnyx always

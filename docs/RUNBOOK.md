@@ -139,6 +139,13 @@ Signaling, media and SIP are hosted by LiveKit Cloud. The agent worker only make
    uv run python scripts/setup_telnyx_trunk.py --phone "+1XXXXXXXXXX" --sip-user "<telnyx user>" --sip-pass "<telnyx pass>"
    ```
    Put the printed trunk ID in `.env` as `SIP_OUTBOUND_TRUNK_ID` and set `TELEPHONY_PROVIDER=livekit_sip`.
+
+   The script sets `destination_country` to `us` (change with `--destination-country`). LiveKit then starts the phone leg
+   on a US server (Ashburn, Chicago or Phoenix). Without it the leg starts in the region of whoever makes the dial
+   request, which is far from the callee when the API runs in another country. For a trunk that already exists:
+   `lk sip outbound update --id <ST_...> --destination-country us` (only that field changes).
+   This pins the phone leg only. The LiveKit room, the agent (`--region`, `us-east`) and the recording bucket are
+   separate settings.
 3. Start the stack: `docker compose up -d --build`. The agent registers with Cloud as `posivex-agent`.
 4. Telnyx authenticates the trunk by username and password. If the Telnyx SIP connection is restricted by IP, allow LiveKit Cloud's static ranges (Static IPs docs) or `0.0.0.0/0`.
 
