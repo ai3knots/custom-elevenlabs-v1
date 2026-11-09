@@ -273,20 +273,54 @@ service start with `lk_`, which is how lead-gen reads each conversation and reco
 When `RESULTS_CALLBACK_URL` is set the agent keeps the transcript, tool events, usage and recording location in memory and
 sends them once at the end of the call to `POST /internal/calls/{id}/result` (header `X-Posivex-Callback-Secret`, 4 attempts
 with backoff). The API stores them and stages the webhook for lead-gen, so the outbox keeps its retries. A repeat of the same
-report is ignored. Expose only `/internal/` and `/v1/convai/` through the reverse proxy, never the rest of the API.
+report is ignored. Expose only `/internal/` through the reverse proxy for the Cloud agent, never the rest of the API; lead-gen
+keeps reaching `/v1/convai/` on `127.0.0.1:8000`.
 
 ### 7.4 Call recording
 
 LiveKit egress records the call (audio only) to an S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Wasabi...) from the moment
 the callee answers. The file appears shortly after the call ends; the API streams it for lead-gen's recording player.
 It is off until `RECORDING_ENABLED=true` and the bucket settings are present. Egress minutes are billed by LiveKit separately
-from agent minutes. Not yet tested against a real bucket.
+from agent minutes. Verified against AWS S3. On start-up the API and the agent write and delete one tiny object
+(`recordings/.startup-check`) and log `Recording bucket '...' is reachable and writable`, or name the setting to fix
+(`RECORDING_BUCKET`, `RECORDING_REGION`, the keys). The audio endpoint's 404 says why there is nothing to play.
 
 ### 7.5 Checks before the first campaign
 
 1. `curl -H "xi-api-key: $POSIVEX_API_KEY" $BASE/v1/convai/agents` returns the two agents.
 2. Lead-gen Settings lists the agents and the number; one manual call completes and its call page shows the transcript and outcome.
 3. Keep `DISABLE_REAL_CALLS=true` on lead-gen until step 2 works, then switch it to `false` for a one-lead campaign.
+
+### 7.6 Deploying the agent to LiveKit Cloud
+
+The API, Postgres and the outbox stay on your server. Only the agent worker moves; it reports each finished call to the API
+over HTTPS (7.3), so it never needs the database.
+
+1. **Public address for `/internal/` only.** Point a DNS name (for example `voice.thebestdevsolutions.space`) at the server and
+   add an nginx site (aaPanel: Website, reverse proxy) that forwards just that path to the API:
+   ```nginx
+   location /internal/ { proxy_pass http://127.0.0.1:8000; proxy_set_header Host $host; }
+   location / { return 404; }
+   ```
+2. **Both `.env` files** (server and `.env.prod`) get the same two values; recreate the API afterwards:
+   ```
+   RESULTS_CALLBACK_URL=https://voice.thebestdevsolutions.space
+   RESULTS_CALLBACK_SECRET=<openssl rand -hex 32>
+   ```
+3. **Deploy from this machine** (the `lk` CLI must be logged in to the project in `LIVEKIT_URL`):
+   ```
+   uv run python scripts/deploy_agent.py --dry-run     # shows names only, and probes the results endpoint
+   uv run python scripts/deploy_agent.py               # `lk agent create` the first time, `lk agent deploy` after
+   ```
+   The script sends only what the agent needs from `.env.prod` (never `LIVEKIT_*`, the database or webhook settings),
+   through a temporary file it deletes. The region defaults to `us-east` (`--region` to change it).
+4. **Cut over.** The Cloud agent registers under the same name (`posivex-agent`) as the one in docker compose, so while both run
+   a call can land on either. Once `lk agent status` shows it running and a test call works, stop the server's worker:
+   `docker compose stop posivex_agent`. To go back: `docker compose start posivex_agent`, then `lk agent delete` or `lk agent rollback`.
+5. **Watch it:** `lk agent logs`, `lk agent status`. Calls still finish through the API's outbox to lead-gen.
+
+On the Build plan the agent scales to zero when idle, so the first call after a quiet period waits roughly 10 to 20 seconds
+for a cold start (callee answers before the worker has joined). The Ship plan keeps it warm.
 
 ## 8. Rollback Procedure
 
