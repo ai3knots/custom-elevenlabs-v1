@@ -126,14 +126,19 @@ def test_fallback_llm_differs_from_primary_model():
 def test_silence_and_endpointing_defaults():
     conv = load_settings().conversation
     assert conv.silence_end_call_seconds == 15.0
-    assert conv.hold_duration_seconds == 12.0
-    assert (conv.min_endpointing_delay, conv.max_endpointing_delay) == (0.5, 4.0)
+    assert conv.hold_duration_seconds == 30.0
+    assert conv.no_speech_watchdog_seconds == 40.0
+    assert (conv.min_endpointing_delay, conv.max_endpointing_delay) == (0.5, 1.5)
 
 
-def test_amd_timeout_default_and_llm_env_overrides(monkeypatch):
+def test_opener_machine_detection_defaults_and_llm_env_overrides(monkeypatch):
     from src.config import load_settings
 
-    assert load_settings().conversation.amd_timeout_seconds == 3.0
+    conv = load_settings().conversation
+    assert (conv.opener_delay_seconds, conv.opener_quiet_wait_seconds) == (1.0, 1.0)
+    assert conv.machine_detection_enabled is True
+    assert conv.machine_detection_model == "gemini-3.5-flash-lite"
+    assert not hasattr(conv, "amd_timeout_seconds")  # the 3 s AMD gate is gone
     assert load_settings().conversation.max_user_speech_seconds == 8.0
     monkeypatch.setenv("LLM_DEFAULT_MODEL", "gemini-3.5-flash-lite")
     monkeypatch.setenv("LLM_FALLBACK_MODEL", "gemini-3.5-flash")

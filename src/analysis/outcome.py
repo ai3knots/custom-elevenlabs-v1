@@ -54,7 +54,7 @@ class CallSignals:
     forced_rationale: str = ""
     voicemail_tool_called: bool = False
     do_not_call_requested: bool = False
-    amd_category: str | None = None
+    greeting_verdict: str | None = None
     notes: list[str] = field(default_factory=list)
 
 
@@ -69,6 +69,24 @@ def format_transcript(transcript: Iterable[Mapping[str, Any]]) -> str:
         if text:
             lines.append(f"{speaker}: {text}")
     return "\n".join(lines)
+
+
+def replied_to_opener(transcript: Iterable[Mapping[str, Any]]) -> bool | None:
+    """Whether the callee said anything after the agent's first line (the scripted opener).
+
+    True or False when the agent spoke, None when it never did (so there was no opener to reply to). Callers
+    that only care whether a reply happened can treat None like False.
+    """
+    seen_agent = False
+    for turn in transcript:
+        text = str(turn.get("message", "")).strip()
+        if not text:
+            continue
+        if turn.get("role") == "agent":
+            seen_agent = True
+        elif seen_agent:
+            return True
+    return False if seen_agent else None
 
 
 def _load_rules() -> str:
@@ -114,8 +132,8 @@ async def classify_transcript(
         + _load_rules()
     )
     context_lines = list(signals.notes)
-    if signals.amd_category:
-        context_lines.append(f"Answering-machine detection verdict: {signals.amd_category}.")
+    if signals.greeting_verdict:
+        context_lines.append(f"Greeting check verdict (who answered): {signals.greeting_verdict}.")
     if signals.voicemail_tool_called:
         context_lines.append("The agent used the voicemail_detection tool.")
     if signals.do_not_call_requested:
@@ -166,6 +184,16 @@ async def resolve_call_outcome(
         return OutcomeResult(
             outcome="hangup_no_speak",
             rationale="Call ended without the callee speaking.",
+            source="no_speech",
+        )
+
+    if not replied_to_opener(transcript):
+        # A greeting, a question or a hold request before our opening line, then nothing: the callee left (or
+        # went quiet) without answering us. Labelled "other" this would count as a conversation in lead-gen,
+        # with an AI follow-up email; as a quick hang-up the lead is simply retried later.
+        return OutcomeResult(
+            outcome="hangup_no_speak",
+            rationale="The callee only spoke before our opening line and never replied to it.",
             source="no_speech",
         )
 

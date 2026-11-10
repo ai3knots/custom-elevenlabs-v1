@@ -112,8 +112,8 @@ async def test_voicemail_detection_ends_the_call_without_draining():
 
 
 @pytest.mark.asyncio
-async def test_amd_human_blocks_voicemail_tool_on_a_recording_notice():
-    state = CallState(amd_category="human", user_turns=1, recent_user_text=["This call is being recorded."])
+async def test_human_verdict_blocks_voicemail_tool_on_a_recording_notice():
+    state = CallState(greeting_verdict="human", user_turns=1, recent_user_text=["This call is being recorded."])
     agent, _, ended = make_agent(call_state=state)
     with pytest.raises(ToolError, match="live person"):
         await agent.voicemail_detection("recorded message")
@@ -122,18 +122,18 @@ async def test_amd_human_blocks_voicemail_tool_on_a_recording_notice():
 
 @pytest.mark.asyncio
 async def test_voicemail_guard_allows_real_cues_uncertain_verdicts_and_later_recordings():
-    cue = CallState(amd_category="human", user_turns=1, recent_user_text=["Please leave a message after the tone."])
+    cue = CallState(greeting_verdict="human", user_turns=1, recent_user_text=["Please leave a message after the tone."])
     agent, _, ended = make_agent(call_state=cue)
     await agent.voicemail_detection("voicemail greeting")
     assert ended == [("voicemail_detected", False)]
 
-    uncertain = CallState(amd_category="uncertain", user_turns=1, recent_user_text=["This call is being recorded."])
+    uncertain = CallState(greeting_verdict="uncertain", user_turns=1, recent_user_text=["This call is being recorded."])
     agent, _, ended = make_agent(call_state=uncertain)
     await agent.voicemail_detection("voicemail greeting")
     assert ended
 
     # Well into the call (a recording after "let me get the owner") the guard no longer applies.
-    later = CallState(amd_category="human", user_turns=8, recent_user_text=["please hold"])
+    later = CallState(greeting_verdict="human", user_turns=8, recent_user_text=["please hold"])
     agent, _, ended = make_agent(call_state=later)
     await agent.voicemail_detection("recorded hold message")
     assert ended
@@ -252,3 +252,18 @@ def test_closing_lines_are_recognised_only_at_the_end_of_a_message():
     assert not is_closing_line("Happy to take care of that for you. What day works best?")
     assert not is_closing_line("How are you currently handling your card payments?")
     assert not is_closing_line("")
+
+
+@pytest.mark.asyncio
+async def test_voicemail_detection_records_whether_it_heard_a_mailbox_or_a_menu():
+    agent, state, _ = make_agent()
+    await agent.voicemail_detection("voicemail: leave a message")
+    assert state.machine_kind == "voicemail"
+
+    agent, state, _ = make_agent()
+    await agent.voicemail_detection("automated phone menu", kind="menu")
+    assert state.machine_kind == "menu"
+
+    agent, state, _ = make_agent()
+    await agent.voicemail_detection("something", kind="nonsense")
+    assert state.machine_kind == "voicemail"  # anything but "menu" is a mailbox

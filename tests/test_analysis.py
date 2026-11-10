@@ -64,3 +64,51 @@ async def test_classifier_failure_falls_back_to_other_or_do_not_call():
     assert (result.outcome, result.source) == ("other", "fallback")
     result = await resolve_call_outcome(TALK, CallSignals(do_not_call_requested=True), failing_classifier)
     assert result.outcome == "do_not_call"
+
+
+# ---- one-line hang-ups and menus ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_a_greeting_before_the_opener_and_nothing_after_is_a_quick_hangup_not_a_conversation():
+    transcript = [
+        {"role": "user", "message": "Thank you for calling Joe's Auto, how can I help you?"},
+        {"role": "agent", "message": "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner?", "interrupted": True},
+    ]
+    result = await resolve_call_outcome(transcript, CallSignals(), failing_classifier)  # classifier must not run
+    assert (result.outcome, result.source) == ("hangup_no_speak", "no_speech")
+
+
+@pytest.mark.asyncio
+async def test_a_hold_request_that_the_callee_never_followed_up_is_a_quick_hangup():
+    transcript = [
+        {"role": "user", "message": "Can I put you on a brief hold?"},
+        {"role": "agent", "message": "Hi, this is Amelia from Clover Posivex."},
+        {"role": "agent", "message": "Hello?"},
+    ]
+    result = await resolve_call_outcome(transcript, CallSignals(), failing_classifier)
+    assert result.outcome == "hangup_no_speak"
+
+
+@pytest.mark.asyncio
+async def test_a_callee_who_spoke_before_our_opener_ever_played_is_a_quick_hangup():
+    transcript = [{"role": "user", "message": "Hello?"}]
+    result = await resolve_call_outcome(transcript, CallSignals(), failing_classifier)
+    assert result.outcome == "hangup_no_speak"
+
+
+@pytest.mark.asyncio
+async def test_any_reply_after_the_opener_still_goes_to_the_classifier():
+    transcript = [
+        {"role": "user", "message": "Hello?"},
+        {"role": "agent", "message": "Hi, this is Amelia. Am I speaking with the owner?"},
+        {"role": "user", "message": "Yes, speaking."},
+    ]
+    result = await resolve_call_outcome(transcript, CallSignals(), fake_classifier)
+    assert (result.outcome, result.source) == ("callback_set", "classifier")
+
+
+@pytest.mark.asyncio
+async def test_a_detected_menu_keeps_its_own_label_over_the_greeting_rule():
+    transcript = [{"role": "user", "message": "For sales press one."}]
+    signals = CallSignals(forced_outcome="automated_menu", forced_rationale="Greeting check: menu (0.95).")
+    result = await resolve_call_outcome(transcript, signals, failing_classifier)
+    assert (result.outcome, result.source) == ("automated_menu", "forced")

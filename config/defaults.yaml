@@ -52,10 +52,16 @@ turn_detector:
 conversation:
   max_duration_seconds: 900
   silence_end_call_seconds: 15.0 # call ends after this much caller silence
-  hold_duration_seconds: 12.0 # skip_turn ("hold on") suspends the silence timer this long
+  hold_duration_seconds: 30.0 # skip_turn ("hold on", "let me get them") suspends the silence timer this long
+  no_speech_watchdog_seconds: 40.0 # end the call after this long with no transcribed words from the callee (0 disables)
   min_endpointing_delay: 0.5
-  max_endpointing_delay: 4.0
-  amd_timeout_seconds: 3.0 # hard cap on answering-machine detection, measured from pickup
+  max_endpointing_delay: 1.5 # longest wait for a reply the turn detector is unsure has ended (was 4.0)
+  opener_delay_seconds: 1.0 # the opening line starts this long after pickup
+  opener_quiet_wait_seconds: 1.0 # at most this much extra wait if the callee is mid-sentence at that moment
+  machine_detection_enabled: true # fast LLM check for voicemail / phone menus, runs beside the opener
+  machine_detection_model: "gemini-3.5-flash-lite"
+  machine_detection_window_seconds: 25.0 # stop checking this long after pickup
+  machine_detection_confidence: 0.8 # hang up on a machine only at or above this confidence
   max_user_speech_seconds: 8.0 # force an answer when one uninterrupted caller turn runs this long (0 disables)
   interruption_min_words: 1
   interruption_ignore_terms:

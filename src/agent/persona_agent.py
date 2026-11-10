@@ -62,10 +62,13 @@ EndCallHandler = Callable[[str, bool], None]
 class CallState:
     """Facts about the live call that the tools and the session handler share."""
 
-    amd_category: str | None = None
+    # What the greeting check decided about whoever answered: human | voicemail | menu | unclear (None: not yet).
+    greeting_verdict: str | None = None
     user_turns: int = 0
     recent_user_text: list[str] = field(default_factory=list)
     voicemail_detected: bool = False
+    # What the voicemail_detection tool heard: "voicemail" (a mailbox) or "menu" (phone menu, screener, system message).
+    machine_kind: str = "voicemail"
     do_not_call: bool = False
     end_reason: str | None = None
     hold_until: float = 0.0  # time.monotonic() deadline set by skip_turn
@@ -93,7 +96,7 @@ class PersonaAgent(Agent):
         call_id: str | None = None,
         event_handler: EventHandler | None = None,
         ignore_terms: Iterable[str] = (),
-        hold_duration_seconds: float = 12.0,
+        hold_duration_seconds: float = 30.0,
         hold_replies: bool = False,
         on_gated_turn: Callable[[str], None] | None = None,
     ) -> None:
@@ -104,7 +107,7 @@ class PersonaAgent(Agent):
         self._ignore_keys = build_ignore_keys(ignore_terms)
         self._hold_duration_seconds = hold_duration_seconds
         # While True the LLM does not answer the callee, so the scripted opener is the first and
-        # only thing spoken after pickup (answering-machine detection runs during this time).
+        # only thing spoken after pickup.
         self._hold_replies = hold_replies
         self._on_gated_turn = on_gated_turn
         self._generation_text = ""
@@ -204,14 +207,13 @@ class PersonaAgent(Agent):
 
     # ---- guards --------------------------------------------------------------------------------
     def _machine_claim_unsupported(self) -> bool:
-        """True when the LLM tries to treat the callee as a machine against the AMD verdict.
+        """True when the LLM tries to treat the callee as a machine against the greeting check's verdict.
 
-        Answering-machine detection is the source of truth for who answered. If it said "human" and
-        nothing the callee said sounds like a voicemail greeting or menu, the model may not hang up
-        early in the call (a recording notice alone is not a machine).
+        If the greeting check said "human" and nothing the callee said sounds like a voicemail greeting
+        or menu, the model may not hang up early in the call (a recording notice alone is not a machine).
         """
         state = self.call_state
-        if state.amd_category != "human" or state.user_turns > MACHINE_GUARD_MAX_USER_TURNS:
+        if state.greeting_verdict != "human" or state.user_turns > MACHINE_GUARD_MAX_USER_TURNS:
             return False
         return not MACHINE_CUES.search(" ".join(state.recent_user_text))
 
@@ -251,20 +253,24 @@ class PersonaAgent(Agent):
         return None
 
     @function_tool
-    async def voicemail_detection(self, reason: str = "voicemail", context: RunContext = None) -> None:  # type: ignore[assignment]
+    async def voicemail_detection(  # type: ignore[assignment]
+        self, reason: str = "voicemail", kind: str = "voicemail", context: RunContext = None
+    ) -> None:
         """Call this immediately, without speaking, when the call is answered by a voicemail greeting, answering machine, recorded or carrier message, call screener or automated menu. Pass a reason of three to five words. Never use it for a live person.
 
         Args:
             reason: Three to five words, for example 'voicemail: leave a message'
+            kind: 'voicemail' for a mailbox or answering machine; 'menu' for a phone menu, call screener, hold or transfer recording, or a carrier or system message
         """
         if self._machine_claim_unsupported():
-            logger.warning("Refusing voicemail_detection(%r); AMD said human and no machine cue was heard.", reason)
+            logger.warning("Refusing voicemail_detection(%r); the greeting check said human and no machine cue was heard.", reason)
             raise ToolError(
                 "A live person was confirmed on the line, and nothing they said is a voicemail greeting or "
                 "phone menu. A notice such as 'this call is being recorded' is not a machine. Do not end the "
                 "call. Answer them naturally and ask whether they are the owner."
             )
         self.call_state.voicemail_detected = True
+        self.call_state.machine_kind = "menu" if (kind or "").strip().lower() == "menu" else "voicemail"
         self.call_state.end_reason = "voicemail_detected"
         logger.info("Voicemail detected by the agent (%s)", reason)
         await self._emit_event("voicemail_detected", {"reason": reason, "call_id": self.call_id})

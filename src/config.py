@@ -89,18 +89,28 @@ class ConversationConfig(BaseModel):
     # The call ends after this many seconds of caller silence (like the reference ElevenLabs agent).
     silence_end_call_seconds: float = 15.0
     # skip_turn ("hold on", "let me get the owner") suspends the silence timer for this long.
-    hold_duration_seconds: float = 12.0
-    # Turn-taking is the same for the whole call; 4 s lets people dictate emails and numbers.
+    hold_duration_seconds: float = 30.0
+    # Ends the call when nothing has been heard from the callee (no transcribed words) for this long, even
+    # if the line is not silent (hold music, a carrier recording looping). 0 disables it.
+    no_speech_watchdog_seconds: float = 40.0
+    # Turn-taking is the same for the whole call. The maximum is how long the agent waits for a reply it is
+    # unsure has ended (short answers like "Yes." and "Hello." often are). It was 4 s, which left 4 s of dead
+    # air on 4 of 11 turns in a real call. Someone dictating an email with long pauses can now be cut off.
     min_endpointing_delay: float = 0.5
-    max_endpointing_delay: float = 4.0
-    amd_enabled: bool = True
+    max_endpointing_delay: float = 1.5
     ring_timeout_seconds: float = 75.0
     interruption_min_words: int = 1
-    amd_no_speech_seconds: float = 6.0
-    # Hard cap on answering-machine detection, measured from pickup. When it expires without a
-    # verdict the callee is treated as a person and greeted, so a recording notice followed by
-    # "Hello?" no longer leaves 10+ seconds of silence.
-    amd_timeout_seconds: float = 3.0
+    # The scripted opening line starts this long after pickup. If the callee is mid-sentence at that moment
+    # it waits up to `opener_quiet_wait_seconds` more for them to finish, then speaks anyway.
+    opener_delay_seconds: float = 1.0
+    opener_quiet_wait_seconds: float = 1.0
+    # Voicemail / phone-menu detection runs beside the opener: a small, fast Gemini model reads what the
+    # callee has said so far (streaming transcript, no wait for the end of their turn) and hangs up on a
+    # machine as soon as it is confident. It replaces the 3 s LiveKit AMD gate, which never classified.
+    machine_detection_enabled: bool = True
+    machine_detection_model: str = "gemini-3.5-flash-lite"
+    machine_detection_window_seconds: float = 25.0
+    machine_detection_confidence: float = 0.8
     max_user_speech_seconds: float = 8.0
     interruption_ignore_terms: list[str] = Field(
         default_factory=lambda: [

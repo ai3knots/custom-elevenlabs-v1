@@ -58,8 +58,8 @@ def test_build_turn_handling_maps_settings():
     settings = Settings()
     th = build_turn_handling(settings)
     assert th["turn_detection"] == "vad"
-    assert th["interruption"] == {"min_words": 1}
-    assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 4.0}
+    assert th["interruption"] == {"min_words": 1, "discard_audio_if_uninterruptible": False}
+    assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 1.5}
 
     settings.turn_detector.mode = "stt-only"
     assert build_turn_handling(settings)["turn_detection"] == "stt"
@@ -80,8 +80,8 @@ def test_build_turn_handling_audio_turn_detector(monkeypatch):
         th = build_turn_handling(settings)
         assert isinstance(th["turn_detection"], inference.TurnDetector)
         # Endpointing and interruption settings are unchanged by the detector choice.
-        assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 4.0}
-        assert th["interruption"] == {"min_words": 1}
+        assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 1.5}
+        assert th["interruption"] == {"min_words": 1, "discard_audio_if_uninterruptible": False}
 
 
 def test_turn_detector_mode_env_override(monkeypatch):
