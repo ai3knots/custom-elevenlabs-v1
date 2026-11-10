@@ -116,14 +116,23 @@ Copy `.env.example` to `.env` and configure credentials:
 | `TURN_DETECTOR_MODE` | End-of-turn strategy: `vad`, `stt-only`, `v1`, `v1-mini` (LiveKit audio turn detector) | `vad` |
 | `LLM_DEFAULT_MODEL` / `LLM_FALLBACK_MODEL` | Override the Gemini models without a rebuild. The fallback must differ from the default. The default also runs the post-call outcome classifier. | `gemini-3.5-flash` / `gemini-3.5-flash-lite` |
 
-The `conversation.amd_timeout_seconds` setting in `config/defaults.yaml` (default `3.0`) caps how long answering-machine detection may delay the opening line after pickup. The opening line waits for the caller to stop talking (up to 3 s) and cannot be interrupted. `conversation.max_user_speech_seconds` (default `8.0`, `0` disables) makes the agent answer when VAD reports one uninterrupted caller turn for that long, e.g. because of background noise.
+Call start (`conversation:` in `config/defaults.yaml`):
+
+- The opening line starts `opener_delay_seconds` (default `1.0`) after pickup. If the callee is mid-sentence it waits up to `opener_quiet_wait_seconds` (default `1.0`) more, then speaks anyway. It cannot be interrupted by the callee.
+- LiveKit's AMD is no longer used. Its 3 s cap ended before most greetings finished, so it returned "uncertain" on 27 of 28 calls and only delayed the opener. Instead `src/agent/greeting_detector.py` runs beside the opener: a small Gemini model (`machine_detection_model`, default `gemini-3.5-flash-lite`) reads the callee's streaming transcript as it arrives and classifies it as a person, a voicemail or a phone menu / carrier message. At or above `machine_detection_confidence` (default `0.8`) the agent stops speaking and hangs up, and the call is labelled `voicemail` or `automated_menu`. The `voicemail_detection` tool remains as a fallback. Set `machine_detection_enabled: false` to turn the check off.
+- The callee's audio keeps reaching speech-to-text while the opener plays (`discard_audio_if_uninterruptible: false` in `build_turn_handling`). LiveKit's default replaces it with silence, which left the greeting check blind for about 7 s and lost the callee's first words. A callee turn that finishes during the opener is still skipped by LiveKit; if it was a real answer ("Yes, this is the owner") the agent replies to it right after the opener (`src/agent/opener.py`), but never to a bare "Hello?", an echo of the opener, or when the greeting check has not confirmed a person.
+- Every call records timing events (`timing_pickup`, `timing_first_callee_speech`, `timing_opener_started`, `timing_machine_detected`, `timing_silence_nudge`, `timing_no_speech_watchdog`) in `call_events`, with `since_pickup_secs` in the payload. Durations and transcript times count from pickup, not from job start, so ringing is not included.
+
+Silence: `silence_end_call_seconds` (default `15`) ends the call after that much caller silence, after one "Hello?" nudge if the callee never spoke. `no_speech_watchdog_seconds` (default `40`, `0` disables) also ends it when no words have been transcribed for that long, for example on hold music. `hold_duration_seconds` (default `30`) is how long `skip_turn` ("hold on", "let me get them") pauses the silence timer.
+
+`conversation.max_user_speech_seconds` (default `8.0`, `0` disables) makes the agent answer when VAD reports one uninterrupted caller turn for that long, e.g. because of background noise.
 
 ### Single-prompt agent
 
 The agent is one system prompt (`prompts/<persona>/system.j2`, Steps A to F) plus the knowledge base, with three tools: `end_call`, `skip_turn` and `voicemail_detection`. There is no state machine. Related settings in `config/defaults.yaml` (`conversation:`):
 
-- `silence_end_call_seconds` (15): the call ends after this much caller silence; `skip_turn` ("hold on") suspends it for `hold_duration_seconds` (12). Before the caller has said anything the agent says one "Hello?" first.
-- `min_endpointing_delay` / `max_endpointing_delay` (0.5 / 4.0): one turn-taking setting for the whole call.
+- `silence_end_call_seconds` (15): the call ends after this much caller silence; `skip_turn` ("hold on") suspends it for `hold_duration_seconds` (30). Before the caller has said anything the agent says one "Hello?" first.
+- `min_endpointing_delay` / `max_endpointing_delay` (0.5 / 1.5): one turn-taking setting for the whole call. The maximum is how long the agent waits for a reply the turn detector is unsure has ended; it was 4.0, which caused 4 s of dead air after short answers such as "Yes.". Raise it if callers dictating emails are cut off.
 - If the model says a goodbye but forgets `end_call`, the call is ended 2.5 s after the goodbye (`CLOSING_GRACE_SECS`).
 - The call outcome is decided after the call by one structured Gemini call over the transcript (`src/analysis/outcome.py`, rules in `prompts/analysis/call_outcome.md`). An answering-machine verdict or the voicemail tool forces `voicemail` / `automated_menu`; no caller speech gives `hangup_no_speak`; a classifier failure gives `other`.
 

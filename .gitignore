@@ -58,3 +58,4 @@ tmp/
 
 # Call recordings and observability exports (contain phone numbers and conversation text)
 recent-calls/
+livekit-recordings/
