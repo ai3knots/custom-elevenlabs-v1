@@ -133,6 +133,9 @@ async def register_trunk(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    # The banner has emoji; a Windows console (cp1252) would crash on them before the first API call.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args()
     asyncio.run(register_trunk(args))
 
