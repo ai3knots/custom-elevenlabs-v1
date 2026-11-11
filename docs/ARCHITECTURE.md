@@ -238,7 +238,7 @@ Migrations are managed with Alembic (see the runbook, section 4, for the exact c
 
 ### 5.5 The webhook outbox
 
-When a call is finalized, one transaction stores the final state **and** a `webhook_outbox` row. The worker polls every 2 s (`--interval`), signs the body (`t=<unix>,v0=<HMAC-SHA256 of "t.body">`, same scheme as ElevenLabs, 30 min replay tolerance) and POSTs to `LEAD_GEN_WEBHOOK_URL` (`/api/webhooks/elevenlabs` is added if missing). Success is any 2xx. A failure is retried up to **10 attempts** with exponential backoff (base 2), then the row becomes `dead_letter` and needs a person. The payload is built to match what lead-gen's parser expects (`src/webhook/payload.py`): transcript turns, `metadata.phone_call`, termination reason, charging, and `analysis.data_collection_results.call_outcome`.
+When a call is finalized, one transaction stores the final state **and** a `webhook_outbox` row. The worker polls every 2 s (`--interval`), signs the body (`t=<unix>,v0=<HMAC-SHA256 of "t.body">`, same scheme as ElevenLabs, 30 min replay tolerance) and POSTs to `LEAD_GEN_WEBHOOK_URL` (`/api/webhooks/elevenlabs` is added if missing). Success is any 2xx. A failure is retried up to **10 attempts** with exponential backoff (base 2), then the row becomes `dead_letter` and needs a person. A delivery in flight holds a 60 s lease (and the row is locked with `FOR UPDATE SKIP LOCKED` on Postgres), so two workers never send the same webhook, and one killed mid-delivery is picked up again when the lease ends. The payload is built to match what lead-gen's parser expects (`src/webhook/payload.py`): transcript turns, `metadata.phone_call`, termination reason, charging, and `analysis.data_collection_results.call_outcome`.
 
 ### 5.6 Costs and metrics inside the service
 
@@ -292,14 +292,14 @@ One system prompt (Steps A to F) drives the whole call; there is no state machin
 
 ### 7.4 The life of a call inside the agent (current behaviour)
 
-1. **Wait for the phone participant** and watch `sip.callStatus` (75 s limit; a callee who leaves while ringing ends the call at once as `no_answer`).
+1. **Wait for the phone participant** (60 s; nobody joining is reported as `no_answer`) and watch `sip.callStatus` (75 s limit; a callee who leaves while ringing ends the call at once as `no_answer`).
 2. **Pickup:** start the call clock, start the recording, start the greeting check, record `timing_pickup` (with ring time).
 3. **Opener, about 1 s after pickup:** wait up to 1 s more only if the callee is mid-sentence, then speak "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of …?" The opener cannot be interrupted. The model's replies are held until then so it never double-introduces.
 4. **Greeting check (`greeting_detector.py`):** a small Gemini call (`gemini-3.5-flash-lite`, about 0.9 s) reads what the callee has said so far as it streams in and classifies it as person, voicemail, menu or unclear, asking again as words arrive for up to 25 s. At confidence 0.8 or more on voicemail or menu it interrupts, hangs up and labels the call `voicemail` or `automated_menu`. The `voicemail_detection` tool is the fallback.
 5. **Overlap:** if the callee answered over the opener, the agent replies to a real answer right after it (not to a bare "Hello?", an echo, or an unconfirmed greeting).
 6. **Conversation:** replies follow the prompt. Backchannel words ("mm-hmm") are ignored while the agent speaks. If one caller turn runs 8 s, it is committed so the agent answers. A goodbye without `end_call` is rescued 2.5 s later.
 7. **Silence:** no words for 15 s ends the call, after one "Hello?" nudge if the callee never spoke (the nudge now re-arms the timer). A 40 s no-speech watchdog also ends calls where the line is not silent but no words are heard. `skip_turn` holds for 30 s. The call is capped at 900 s.
-8. **End:** the outcome is chosen, timing events stored, and one report is sent to the voice API.
+8. **End:** the outcome is chosen, timing events stored, and one report is sent to the voice API. If the API is down the report is retried for up to 60 s (backoff 1, 2, 4, 8, 16 s); the agent's shutdown allowance is 120 s, so the outcome classifier plus the full retry budget fit. A longer outage still loses that call's report.
 
 Time-based decisions use the call clock from pickup, not from job start.
 
@@ -373,7 +373,7 @@ A call is identified by one id (`lk_xxxxxxxxxxxxxx`) everywhere: the Postgres `c
 
 | Link | Mechanism |
 |---|---|
-| Lead-gen to voice API | Header `xi-api-key` = `VOICE_API_KEY` in lead-gen = `POSIVEX_API_KEY` on the API (constant-time compare) |
+| Lead-gen to voice API | Header `xi-api-key` = `VOICE_API_KEY` in lead-gen = `POSIVEX_API_KEY` on the API (constant-time compare; the ElevenLabs key is the fallback; with neither set the routes answer 503, never open) |
 | Cloud agent to voice API | Header `X-Posivex-Callback-Secret` = `RESULTS_CALLBACK_SECRET` (the endpoint answers 503 if unset). The deploy script checks this before it deploys |
 | Voice API to lead-gen | HMAC-SHA256 signature `t=…,v0=…` with `ELEVENLABS_WEBHOOK_SECRET` on the API, accepted by lead-gen as `VOICE_WEBHOOK_SECRET` |
 | Voice API to LiveKit | LiveKit API key and secret |
@@ -392,9 +392,12 @@ A call is identified by one id (`lk_xxxxxxxxxxxxxx`) everywhere: the Postgres `c
 1. **Credentials were pasted into chat** during development (MongoDB, ElevenLabs, Gemini, SMTP, LiveKit, AWS, webhook secrets). Rotate them.
 2. **`ALLOW_UNSIGNED_WEBHOOKS=true`** on lead-gen: unsigned webhooks are accepted. Set it to `false`.
 3. **AWS root keys** are used for the bucket. Create a limited key for one bucket.
-4. **`/docs` is public** on the API hostname, and every `/v1/convai/*` route is reachable on the internet (key-protected). Only `/internal/` and `/health` need to be public; an nginx lockdown is recommended.
+4. **`/docs`, `/openapi.json`, `/metrics` and `/health/ready` are public** on the API hostname (readiness returns the database error text), and every `/v1/convai/*` route is reachable on the internet (key-protected). Only `/internal/` and `/health` need to be public; an nginx lockdown is recommended.
 5. **The compose file's Postgres default password** (`posivex_secure_pass`) applies if `POSTGRES_PASSWORD` is not set.
 6. **No retention policy** for recordings, transcripts or webhook payloads.
+7. **A report lost to a long API outage.** The agent has no durable store of its own, so an outage longer than the 60 s retry budget loses that call's report (the call row stays `in_progress`).
+
+Closed since the first audit: the unauthenticated `/api/v1/calls` route is gone, a missing API key is refused (503) instead of accepting any key, `config_overrides` on a call may only set `stt`, `llm`, `tts`, `vad`, `turn_detector` and `conversation`, phone numbers are masked to their last four digits in logs, and a failed phone leg deletes its room so the dispatched agent does not wait.
 
 ---
 
@@ -427,7 +430,7 @@ About 240 automated tests (`uv run pytest`) cover the agent logic, the greeting 
 
 ## 13. Settings reference
 
-Defaults live in `config/defaults.yaml` (and `src/config.py`); environment variables override.
+Defaults live in `config/defaults.yaml` (and the schemas in `src/config/models.py`); environment variables override (the full list is `ENV_RULES` in `src/config/loader.py`, documented in `.env.example`). `telephony.provider` defaults to `livekit_sip`; `mock` and `console` are for tests.
 
 | Area | Setting | Default |
 |---|---|---|
@@ -473,18 +476,21 @@ Defaults live in `config/defaults.yaml` (and `src/config.py`); environment varia
 |---|---|
 | `src/main.py` | Entry points: `agent`, `api`, `outbox`, `dev`; startup checks |
 | `src/api/` | FastAPI app factory (`create_app`, nothing is built at import), dependencies (auth), routes (`convai_emulation`, `convai_read`, `internal`, `health`) and `services/dispatch.py` (the dial flow behind the dial route) |
-| `src/agent/session_handler.py` | The per-call flow: pickup, opener, silence, hold, shutdown and reporting |
+| `src/agent/session_handler.py` | The LiveKit entrypoint: reads the dispatch, builds the providers, hands the call to `CallSession`; worker prewarm and the server factory |
+| `src/agent/call_session/` | One call, a piece per concern: `session.py` (wires and runs them), `lifecycle.py` (first end reason wins, goodbye rescue, time cap), `silence_control.py` (the nudge, the watchdog), `greeting_check.py`, `opening.py` (the opener and overlap), `finalizer.py` (outcome, cost, report), `timeline.py`, `transcript.py`, `waits.py`, `telemetry.py` |
 | `src/agent/persona_agent.py` | The agent class, its three tools and the call state |
 | `src/agent/greeting_detector.py` | The voicemail and phone-menu check |
 | `src/agent/opener.py`, `silence.py`, `call_clock.py` | Overlap replies, the nudge and watchdog, the pickup clock |
 | `src/analysis/outcome.py` | The post-call outcome classifier and rules |
+| `src/config/` | `models.py` (settings schemas), `call_request.py` (the dial request and its override allow-list), `loader.py` (layering and the `ENV_RULES` table) |
 | `src/persistence/` | `CallRecorder` (Postgres) and `RemoteRecorder` (HTTPS report from the Cloud agent) |
-| `src/webhook/` | Payload builder, HMAC signer, outbox worker |
+| `src/webhook/` | Payload builder, HMAC signer, outbox worker (a claimed delivery holds a 60 s lease, so two workers never send the same webhook) |
 | `src/telephony/` | LiveKit SIP dialer and the recording egress |
 | `src/storage.py` | S3 access for playback and the startup check |
 | `src/providers/` | Deepgram, Gemini, ElevenLabs and VAD factories |
 | `src/prompts/` and `prompts/` | Prompt rendering and the persona prompts, knowledge base and outcome rules |
 | `src/db/` | SQLAlchemy models and Alembic migrations |
 | `scripts/deploy_agent.py`, `setup_telnyx_trunk.py` | Deploy to LiveKit Cloud; create the SIP trunk |
+| `.pre-commit-config.yaml` | ruff and pyright as pre-commit hooks (`uv run pre-commit install`) |
 | `config/defaults.yaml` | Default settings, agents and phone numbers |
 | `docs/` | `RUNBOOK.md` (operating guide), `USAGE_COST_REPORT.md`, `DECISIONS.md`, and this file |

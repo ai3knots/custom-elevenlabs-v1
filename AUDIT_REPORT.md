@@ -1,6 +1,6 @@
 # Audit report: Posivex voice agent (Phase 1 and 2)
 
-Status: **cleanup steps 1 to 5 are done** (see "Outcome of the cleanup" below). Sections A to G are the audit as it was written, before the cleanup; the outcome section says what happened to each finding.
+Status: **the cleanup is done** (see "Outcome of the cleanup" below). Sections A to G are the audit as it was written, before the cleanup; the outcome section says what happened to each finding.
 
 Baseline measured before writing this (so every later step can be compared against it):
 
@@ -19,79 +19,95 @@ Method limits: static reading of every file in `src/`, `scripts/`, `config/`, `a
 
 ## Outcome of the cleanup
 
-Branch `chore/audit-cleanup`, created from `feat/leadgen-integration` (not from `main`: `main` is 19 commits behind and does not contain the audited code). Six local commits, **not pushed, not deployed, no migration applied anywhere.** Steps 6 (modularize `run_agent_session`), 7 (LiveKit alignment) and 8 (tooling) are **not started**; they wait for your approval.
+Branch `chore/audit-cleanup`, created from `feat/leadgen-integration` (not from `main`: `main` is 19 commits behind and does not contain the audited code). Sixteen local commits, **not pushed, not deployed, no migration applied anywhere.** Every finding in sections A to G was either fixed, deliberately left (table below), or is a decision for you.
 
-| Commit | Step | What |
-|---|---|---|
-| `da7aa84` | setup | this report and `docs/ARCHITECTURE.md` |
-| `0206a15` | 1 | safety net: 26 call-flow tests, 26 route-contract tests, fakes in `tests/support/` |
-| `ec3f882` | 2 | `.dockerignore`, `.env.example`, README, two ruff errors |
-| `4f5eeff` | 3 | dead code, unused config, stale files, drop-tables migration |
-| `b5e9898` | 4 | pyright errors, named constants, duplicated helpers merged |
-| `86bd484` | 5 | dial service, API healthcheck, pinned base images, no app at import |
+| Commit | What |
+|---|---|
+| `da7aa84` | this report and `docs/ARCHITECTURE.md` |
+| `0206a15` | safety net: call-flow tests, route-contract tests, fakes in `tests/support/` |
+| `ec3f882` | `.dockerignore`, `.env.example`, README, two ruff errors |
+| `4f5eeff` | dead code, unused config, stale files, drop-tables migration |
+| `b5e9898` | pyright errors, named constants, duplicated helpers merged |
+| `86bd484` | dial service, API healthcheck, pinned base images, no app at import |
+| `f5c0033` | an earlier version of this section |
+| `d772798` | the two B5 bugs: lost call report, dispatched agent left waiting |
+| `19c703f` + `aed8c77` | fail closed on a missing API key, limit call overrides, phone numbers out of logs, outbox lease, `COUNT(*)` |
+| `0d37e49` | response models, cached S3 client, no file reads on the call-start path |
+| `0db8d76` | LiveKit-idiomatic tools, no private plugin import, log context fields, real-framework tool tests |
+| `3bc6c93` | pre-commit config, pyright clean across the repo |
+| `629472f` | `run_agent_session` split into `src/agent/call_session/` |
+| `ef75034` | `config.py` split into `src/config/`, environment rules as a table |
 
 ### Results against the baseline
 
 | Check | Baseline | Now |
 |---|---|---|
-| pytest | 194 passed | 260 passed (new: call flow, routes, migration, helpers, dial service) |
+| pytest | 194 passed | 302 passed |
 | ruff | 2 errors | 0 |
 | pyright, `src/` | 4 errors | 0 |
-| pyright, whole repo | 49 errors | 44 (all one pattern, `TypedDict` access in tests) |
-| Routes | 16 | 12: the 12 lead-gen and the agent use, unchanged in path, status code and body (pinned by `tests/test_route_contract.py`) |
+| pyright, whole repo | 49 errors | 0 |
+| Routes | 16 | 12: the ones lead-gen and the agent use, unchanged in path, status code and body (pinned by `tests/test_route_contract.py`; response models added, bodies identical) |
 | Tool schemas (`end_call`, `skip_turn`, `voicemail_detection`) | | byte-identical to before the cleanup (compared by building both) |
-| Files / lines | | 213 files deleted (202 under `reference/`); about 44,000 lines removed, 2,800 added (mostly tests) |
+| Largest function | `run_agent_session`, 610 lines, 26 closures | about 90 lines; `session_handler.py` 901 to 366 lines |
+| Files / lines | | 213 files deleted (202 under `reference/`); about 45,000 lines removed, 5,100 added (mostly tests) |
 
-### What was removed
+### Fixed
 
-- **Routes:** `POST/GET /api/v1/calls` (unauthenticated dial), `POST /api/webhooks/elevenlabs/initiation`, `POST /v1/convai/twilio/outbound-call`. Lead-gen calls none of them (it serves its own initiation webhook, and only uses the twilio route for a number whose provider is `twilio`, while ours are `sip_trunk`).
-- **Code:** A1 items 1, 2, 3, 4, 6, 7, 8, 9, 13, 14, 16 plus `get_recent_call_by_phone` (unused after the initiation route went), the two unused models, `scripts/call.py`.
+- **B5-1, a finished call's report lost when the API is down.** The report now retries within a 60 s budget (backoff capped at 16 s) and the agent's shutdown allowance is 120 s, so the outcome classifier plus the whole budget fit. An outage longer than the budget still loses that call's report (the agent has no durable store of its own): this is the one remaining limit, documented in ARCHITECTURE 11.3.
+- **B5-2, the dial leaving a dispatched agent waiting.** A failed phone leg deletes the room, so the agent job ends. The agent also stops waiting for a callee after 60 s and reports `no_answer`.
+- **Security.** A missing API key is refused (503) instead of accepting any key; `config_overrides` on a call may only set `stt`, `llm`, `tts`, `vad`, `turn_detector` and `conversation` (`kb` could point at any file, `recording` and `webhook` hold credentials and targets; lead-gen sends none of them); the unauthenticated dial route is gone; `telephony.provider` defaults to `livekit_sip`, so a server missing the setting fails the dial loudly instead of reporting success and dialing nobody.
+- **Privacy.** Phone numbers are masked to their last four digits in the agent's session log and in every JSON log line; a metadata parse error logs which fields were wrong, never the metadata or values.
+- **Outbox.** A delivery holds a 60 s lease (and the row is locked with `FOR UPDATE SKIP LOCKED` on Postgres): two workers never send the same webhook, and one killed mid-delivery is recovered when the lease ends.
+- **Efficiency and tidiness.** Active calls are counted in the database; one S3 client per set of credentials; settings YAML and the prompt render run in a worker thread at call start; response models on the fixed-shape routes; the FastAPI dependency renamed `get_session_factory`; one `load_dotenv()`.
+- **LiveKit alignment.** `end_call` takes the `RunContext` first and always gets one (verified through the framework's own argument binding); `voicemail_detection` loses an unused parameter; the private `_supports_thinking_level` import is gone (the name-based rule agrees with it for every model in use); `ctx.log_context_fields` carries the call id and room on every log line.
+- **Tooling.** `.pre-commit-config.yaml` runs the pinned ruff and pyright through local hooks (validated and run once; not installed into `.git`, README says how); pyright is clean everywhere (the transcript parameters of the outcome code take any `Sequence`; test stand-ins are cast).
+- **Structure.** `run_agent_session` became `src/agent/call_session/` (timeline, transcript, lifecycle, silence control, greeting check, opener flow, finalizer, waits, telemetry, and `CallSession` that wires and runs them); `config.py` became `src/config/` (models, call request, loader) with the 70 repeated lines of environment code as one table.
+
+### How the refactors were checked
+
+- The 33 call-flow tests written before the refactor ran **unchanged** against the new structure (the pieces take the patched names as parameters).
+- **Mutation testing** of the new code: twelve deliberate breakages (opener interruptible, overlap reply dropped or sent to a voicemail, last end reason wins, a dropped ringing call not labelled `no_answer`, nudge sent every time, machine not interrupted, goodbye never rescued, pickup not timed, finalizer running twice, watchdog never started, hold ignored). Five survived the first time, which exposed gaps in the net; each gap now has a test and **all twelve are caught**.
+- The LiveKit tools are also driven through a real `AgentSession` in text mode with a scripted model.
+- A table-driven test checks every environment rule, and that every variable the loader reads is documented in `.env.example`.
+
+### What was removed (steps 1 to 5, unchanged)
+
+- **Routes:** `POST/GET /api/v1/calls`, `POST /api/webhooks/elevenlabs/initiation`, `POST /v1/convai/twilio/outbound-call`. Lead-gen calls none of them (it serves its own initiation webhook, and only uses the twilio route for a number whose provider is `twilio`, while ours are `sip_trunk`).
+- **Code:** A1 items 1, 2, 3, 4, 6, 7, 8, 9, 13, 14, 16, `get_recent_call_by_phone`, the two unused models, `scripts/call.py`, `Settings.language`.
 - **Config and env:** `redis_url`, `sip_phone_number_id`, `environment`, `gender`, `display_name`, `tts.encoding`, `tts.expressive`, `webhook.max_retries`, their YAML keys, env mappings and `.env.example` entries.
 - **Docker:** the no-op `download-files` step and the `posivex_agent` compose service.
-- **Files:** `reference/`, `spikes/`, `CONTEXT_NOTES.md` and six stale docs, the `lk_inspect_venv/` gitignore line.
+- **Files:** `reference/`, `spikes/`, `CONTEXT_NOTES.md` and six stale docs.
 - **Database (migration only, not applied):** `agent_config_versions` and `experiments`, via `alembic/versions/b7c41e5a9d20_drop_unused_tables.py` (reversible, tested on a throwaway SQLite file).
-- **Dependencies:** none became unused.
-
-### What was changed (no behaviour change unless listed)
-
-- `google-genai` declared in `pyproject.toml` (and `uv.lock`, two lines).
-- STT, LLM, TTS and VAD mocks moved to `tests/support/mock_providers.py`. The telephony mock stays: `defaults.yaml` defaults `telephony.provider` to `mock`.
-- One `as_utc`, one S3 client builder, one `share_thought_signatures`, one early-call threshold; magic numbers named; debug logs on silent broad excepts.
-- The dial flow moved to `src/api/services/dispatch.py`; the route maps its errors to the same 429 and 500.
-- Compose: API liveness healthcheck and a 30 s `stop_grace_period`. Dockerfile: base images pinned to exact versions that resolve to the same images as the floating tags.
-- `create_app()` is no longer called at import.
-- **Behaviour changes, both on paths no caller uses:** an unsupported `TURN_DETECTOR_MODE` now fails at startup instead of silently using VAD, and a telephony provider's `dial` raises if `call_id` is missing instead of inventing a `conv_` id.
+- **Behaviour changes on paths no caller uses:** an unsupported `TURN_DETECTOR_MODE` fails at startup instead of silently using VAD; a provider's `dial` raises if `call_id` is missing.
 
 ### Left alone, on purpose
 
 | Item | Why |
 |---|---|
-| B5-1 call result lost when the API is down for more than the 30 s shutdown budget; B5-2 the dial dispatches the agent before the SIP call exists | You scoped them out (decision 8): they are behaviour fixes for a separate task |
 | `/metrics`, `/docs`, `/openapi.json` open; readiness returns the database error text | Your decision 1: unchanged |
-| `verify_xi_api_key` accepts any non-empty key when neither `POSIVEX_API_KEY` nor `ELEVENLABS_API_KEY` is set | Public behaviour; needs your decision |
-| `telephony.provider` defaults to `mock` (a server missing `TELEPHONY_PROVIDER` reports success and dials nobody) | `defaults.yaml` still selects it; needs your decision |
-| `Settings` also reads generic env names (`LANGUAGE`, `PERSONA`); the `config_overrides` caller power; phone numbers and names in logs | Config and logging behaviour |
-| `run_agent_session` (a 600-line function) | Step 6, waiting for approval; it is now covered by 27 characterization tests |
-| `ctx.connect()` before `session.start`, `context: RunContext = None`, the private LiveKit/Google attributes, `ctx.log_context_fields` | Step 7, waiting for approval |
-| Pre-commit config (the dependency is declared, there is no config) and the 44 test-side pyright errors | Step 8, tooling, asks first |
-| Outbox row locking (safe with one worker), `COUNT(*)` for active calls, S3 client per audio request, file reads at call start, two `get_sessionmaker` names, no `response_model` on routes | Low value, not requested |
-| `gcc g++ python3-dev libglib2.0-0` in the builder; `postgres:16-alpine` on its major version | Cannot verify without a build; a major pin is deliberate for Postgres. uv is pinned at 0.9.30, the last version published for bookworm |
+| `ctx.connect()` before `session.start` | LiveKit's docs allow it, and the room name is needed earlier; dropping it cannot be verified without a live call |
+| `_thought_signatures` set through a private attribute | LiveKit has no public way to share it. A test proves the attribute still exists in the pinned version (`livekit-agents==1.8.10`), so an upgrade fails loudly |
+| `metrics_collected` / OpenTelemetry | An optional addition, not a defect: the per-call `timing_*` events cover what the analysis needed |
+| `telephony.max_concurrent_calls` is 50 against 5 concurrent sessions on the Build plan | An API-side limit; set it to your plan when you upgrade |
+| `Settings` also reads field-named environment variables | Through `load_settings()` (the only production path) the YAML wins over `PERSONA`; a test pins it. Only a direct `Settings()` in a test is affected |
+| Detail, health and conversation-detail routes have no response model | The conversation detail is a large free-form nested document; the others are trivial. All are pinned by the contract tests |
+| `gcc g++ python3-dev libglib2.0-0` in the builder; `postgres:16-alpine` on its major version; uv pinned at 0.9.30 | Cannot verify without a build; a major pin is deliberate for Postgres; 0.9.30 is the last uv version published for bookworm |
+| `greenlet` declared explicitly | Redundant with `sqlalchemy[asyncio]` but harmless; the lock is unchanged by it |
 | `docs/SIP_NETWORK_DEBUG_GUIDE.md`, `scripts/deploy_agent.py`'s `NOT_SENT` list | Historical guide (marked as such); `NOT_SENT` documents keys that must never be sent to the Cloud agent |
-| A few vulture findings in `src/` | Framework hooks (`on_user_turn_completed`), tool methods, pydantic fields, enum members, and `GreetingDetector.active` and `last_verdict` (used by tests) |
+| A few vulture findings in `src/` | Framework hooks, tool methods, pydantic fields, enum members, and `GreetingDetector.active` and `last_verdict` (used by tests) |
+| Callee words in the INFO log (`Holding reply until ... callee said: ...`) | Needed to debug a call; phone numbers are masked, spoken words are not |
 
-### Server and release actions (yours)
+### Still open, for you
 
-1. `git push origin chore/audit-cleanup`, review, merge.
-2. On the server: `git pull`, then `docker compose up -d --build --remove-orphans posivex_api` (removes the old stopped `posivex_agent` container).
-3. Apply the migration inside the API container: `docker compose exec posivex_api alembic current` (expect `19ddfd7201e0`), then `alembic upgrade head`. If `current` prints nothing, run `alembic stamp 19ddfd7201e0` first. Details are in RUNBOOK section 4.
-4. Check `docker compose ps` shows `posivex_api` as `healthy`, and `GET /health/ready`.
-5. The agent itself is unchanged by this cleanup except for dead code; redeploy it with `scripts/deploy_agent.py` when you want the cleaned image on LiveKit Cloud, then run one test call.
+1. **The 60 s report budget.** A call whose API stays down longer than that is lost (see above). A real fix needs an agent-side store, which is a design choice (for example a queue the Cloud agent can reach).
+2. **Server and release actions:** `git push origin chore/audit-cleanup`, review, merge; on the server `git pull` then `docker compose up -d --build --remove-orphans posivex_api`; apply the migration inside the container (`alembic current`, then `alembic upgrade head`; RUNBOOK section 4); check `docker compose ps` shows `healthy`; redeploy the agent with `scripts/deploy_agent.py` and run one test call. After the redeploy, check in `lk agent logs` that lines carry the call id and a masked phone number.
+3. **A heads-up on behaviour changes that a deployment could notice:** the API now answers 503 if neither `POSIVEX_API_KEY` nor `ELEVENLABS_API_KEY` is set (production has both); a server without `TELEPHONY_PROVIDER` now tries to dial for real (production sets `livekit_sip`); a call request with `config_overrides` outside the allowed sections now gets 400.
 
 ### Not verified
 
 - **No Docker build or compose run** (Docker is not running on this machine): the Dockerfile and compose changes were checked by parsing, by running the healthcheck command against a real local API, and by comparing base image digests, not by building.
 - The state of the production database (whether Alembic created it), nginx rules, and whether anything outside this repo calls the removed routes. Lead-gen's source was searched, ElevenLabs dashboard settings were not.
-- Real-call behaviour. The call flow is covered by fakes; the first test call after a deploy is the real check.
+- **Real-call behaviour.** The call flow is covered by fakes, by the real framework in text mode, and by mutation testing, but no phone call was placed. The first test call after a deploy is the real check.
 
 ---
 
@@ -425,4 +441,4 @@ Each step is a separate commit (or batch), reviewable and revertable. After each
 
 ---
 
-**Steps 1 to 5 of this plan are done (see "Outcome of the cleanup" at the top). Steps 6 to 8 wait for approval.**
+**All eight steps of this plan are done (see "Outcome of the cleanup" at the top).**
