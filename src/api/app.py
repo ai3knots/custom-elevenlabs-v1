@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.api.routes import (
-    calls_router,
     convai_read_router,
     convai_router,
     health_router,
@@ -80,7 +79,6 @@ def create_app(
 
     # Register Routers
     app.include_router(health_router)
-    app.include_router(calls_router)
     app.include_router(convai_router)
     app.include_router(convai_read_router)
     app.include_router(internal_router)

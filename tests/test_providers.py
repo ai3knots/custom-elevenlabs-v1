@@ -1,31 +1,16 @@
-"""Unit tests for pluggable provider registry, mock classes, and single-line swappability."""
+"""Unit tests for the provider factories."""
 
 import pytest
 from livekit.agents.llm import FallbackAdapter
 from livekit.plugins import deepgram, elevenlabs, google, silero
 
 from src.config import LLMConfig, STTConfig, TTSConfig, VADConfig
-from src.providers import (
-    MockLLM,
-    MockSTT,
-    MockTTS,
-    MockVAD,
-    create_fallback_llm,
-    get_llm,
-    get_stt,
-    get_tts,
-    get_vad,
-)
+from src.providers import create_fallback_llm, get_llm, get_stt, get_tts, get_vad
+from tests.support.mock_providers import MockLLM
 
 
-def test_stt_swappable_mock_vs_real():
-    """Verify STT can be swapped from deepgram to mock via single-line config change."""
-    # Mock STT
-    mock_cfg = STTConfig(provider="mock")
-    mock_instance = get_stt(mock_cfg)
-    assert isinstance(mock_instance, MockSTT)
-
-    # Real Deepgram STT
+def test_stt_builds_deepgram():
+    """The STT factory builds Deepgram with the configured model and language."""
     real_cfg = STTConfig(provider="deepgram", model="nova-3", language_mode="en")
     real_instance = get_stt(real_cfg, api_key="test_deepgram_key")
     assert isinstance(real_instance, deepgram.STT)
@@ -54,14 +39,9 @@ def test_stt_language_modes():
     assert multi_stt._opts.language_hint == ["en", "es"]
 
 
-def test_llm_swappable_mock_vs_real():
-    """Verify LLM can be swapped from google to mock via single-line config change."""
-    # Mock LLM
-    mock_cfg = LLMConfig(provider="mock")
-    mock_instance = get_llm("mock-model", mock_cfg)
-    assert isinstance(mock_instance, MockLLM)
-
-    # Real Google Gemini LLM (3.5 supports thinking_level)
+def test_llm_builds_google_gemini():
+    """The LLM factory builds Gemini, with thinking_level for 3.5 and thinking_budget for 2.5."""
+    # Gemini 3.5 supports thinking_level
     google_cfg = LLMConfig(provider="google", temperature=0.0, thinking_level="minimal")
     google_instance = get_llm("gemini-3.5-flash-lite", google_cfg, api_key="test_gemini_key")
     assert isinstance(google_instance, google.LLM)
@@ -74,14 +54,8 @@ def test_llm_swappable_mock_vs_real():
     assert google_25_instance._opts.model == "gemini-2.5-flash"
 
 
-def test_tts_swappable_mock_vs_real():
-    """Verify TTS can be swapped from elevenlabs to mock via single-line config change."""
-    # Mock TTS
-    mock_cfg = TTSConfig(provider="mock")
-    mock_instance = get_tts(mock_cfg)
-    assert isinstance(mock_instance, MockTTS)
-
-    # Real ElevenLabs TTS
+def test_tts_builds_elevenlabs():
+    """The TTS factory builds ElevenLabs with the configured model and voice."""
     eleven_cfg = TTSConfig(
         provider="elevenlabs",
         model="eleven_v3_conversational",
@@ -93,14 +67,8 @@ def test_tts_swappable_mock_vs_real():
     assert eleven_instance._opts.voice_id == "eXpIbVcVbLo8ZJQDlDnl"
 
 
-def test_vad_swappable_mock_vs_real():
-    """Verify VAD can be swapped from silero to mock via single-line config change."""
-    # Mock VAD
-    mock_cfg = VADConfig(provider="mock")
-    mock_instance = get_vad(mock_cfg)
-    assert isinstance(mock_instance, MockVAD)
-
-    # Real Silero VAD
+def test_vad_builds_silero():
+    """The VAD factory builds Silero."""
     silero_cfg = VADConfig(provider="silero", min_speech_duration=0.05)
     silero_instance = get_vad(silero_cfg)
     assert isinstance(silero_instance, silero.VAD)

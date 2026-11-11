@@ -112,23 +112,16 @@ class PersonaAgent(Agent):
         self._on_gated_turn = on_gated_turn
         self._generation_text = ""
         self._end_call_warned = False
-        self._test_session: Any | None = None
         super().__init__(instructions=instructions)
 
     # ---- session access ------------------------------------------------------------------------
     @property
     def active_session(self) -> Any | None:
-        """Return the active AgentSession or test session if attached."""
-        if self._test_session is not None:
-            return self._test_session
+        """The active AgentSession, or None before the agent is attached to one."""
         try:
             return self.session
         except RuntimeError:
             return None
-
-    def attach_test_session(self, session: Any) -> None:
-        """Attach a mock or test session for isolated unit testing."""
-        self._test_session = session
 
     def _agent_is_speaking(self) -> bool:
         session = self.active_session

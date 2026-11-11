@@ -20,17 +20,19 @@ class DispatchResult(BaseModel):
     extra: dict[str, str] = Field(default_factory=dict)
 
 
+def require_call_id(request: CallRequest) -> str:
+    """The call id the API assigned before dialing; a provider never invents one."""
+    if not request.call_id:
+        raise ValueError("CallRequest.call_id must be set before dialing")
+    return request.call_id
+
+
 class TelephonyProvider(ABC):
     """Abstract interface for initiating and managing telephony calls."""
 
     @abstractmethod
     async def dial(self, request: CallRequest, room_name: str) -> DispatchResult:
         """Dial an outbound phone number and connect it to a room."""
-        ...
-
-    @abstractmethod
-    async def hangup(self, room_name: str, participant_id: str) -> None:
-        """Hang up or remove a participant from an active room."""
         ...
 
     @abstractmethod

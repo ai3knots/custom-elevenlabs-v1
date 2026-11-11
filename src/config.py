@@ -29,7 +29,7 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 class STTConfig(BaseModel):
     """Speech-to-Text configuration settings."""
 
-    provider: Literal["deepgram", "mock", "assemblyai"] = "deepgram"
+    provider: Literal["deepgram"] = "deepgram"
     model: str = "nova-3"
     language_mode: Literal["en", "es", "multi"] = "en"
     language: str = "en-US"
@@ -43,7 +43,7 @@ class STTConfig(BaseModel):
 class LLMConfig(BaseModel):
     """Large Language Model configuration settings."""
 
-    provider: Literal["google", "mock"] = "google"
+    provider: Literal["google"] = "google"
     default_model: str = "gemini-3.5-flash"
     # Must differ from the primary models, otherwise the fallback adds retries without resilience.
     fallback_model: str = "gemini-3.5-flash-lite"
@@ -56,19 +56,17 @@ class LLMConfig(BaseModel):
 class TTSConfig(BaseModel):
     """Text-to-Speech configuration settings."""
 
-    provider: Literal["elevenlabs", "mock"] = "elevenlabs"
+    provider: Literal["elevenlabs"] = "elevenlabs"
     model: str = "eleven_v3_conversational"
     voice_id: str = "eXpIbVcVbLo8ZJQDlDnl"  # Default Amelia voice
-    encoding: Literal["pcm_24000", "pcm_16000", "ulaw_8000"] = "pcm_24000"
     stability: float = 0.5
     similarity_boost: float = 0.75
-    expressive: bool = True
 
 
 class VADConfig(BaseModel):
     """Voice Activity Detection configuration settings."""
 
-    provider: Literal["silero", "mock"] = "silero"
+    provider: Literal["silero"] = "silero"
     min_speech_duration: float = 0.05
     min_silence_duration: float = 0.55
     prefix_padding_duration: float = 0.5
@@ -79,7 +77,7 @@ class TurnDetectorConfig(BaseModel):
 
     # "v1" / "v1-mini" use LiveKit's audio turn detector (v1 via LiveKit Inference,
     # falling back to the local v1-mini on errors or when the plan allowance runs out).
-    mode: Literal["vad", "stt-only", "v1", "v1-mini", "multimodal", "eou"] = "vad"
+    mode: Literal["vad", "stt-only", "v1", "v1-mini"] = "vad"
 
 
 class ConversationConfig(BaseModel):
@@ -154,7 +152,6 @@ class WebhookConfig(BaseModel):
 
     lead_gen_base_url: str = "http://localhost:3000"
     webhook_secret: str = "dev_webhook_secret"
-    max_retries: int = 10
     retry_backoff_base: float = 2.0
 
 
@@ -163,7 +160,6 @@ class TelephonyConfig(BaseModel):
 
     provider: Literal["livekit_sip", "mock", "console"] = "mock"
     sip_trunk_id: str | None = None
-    sip_phone_number_id: str | None = None
     max_concurrent_calls: int = 50
 
 
@@ -204,11 +200,8 @@ class RecordingConfig(BaseModel):
 class Settings(BaseSettings):
     """Global application settings with layered resolution."""
 
-    environment: Literal["development", "staging", "production"] = "development"
     log_level: str = "INFO"
     persona: Literal["amelia", "michael"] = "amelia"
-    display_name: str = "Amelia"
-    gender: str = "female"
     language: Literal["en", "es"] = "en"
 
     # Core Infrastructure Secrets
@@ -219,7 +212,6 @@ class Settings(BaseSettings):
     deepgram_api_key: str = ""
     elevenlabs_api_key: str = ""
     database_url: str = "postgresql+asyncpg://posivex:posivex@localhost:5432/posivex_calls"
-    redis_url: str = "redis://localhost:6379/0"
 
     # Sub-component Configurations
     stt: STTConfig = Field(default_factory=STTConfig)
@@ -388,8 +380,6 @@ def load_settings(
         "DEEPGRAM_API_KEY": "deepgram_api_key",
         "ELEVENLABS_API_KEY": "elevenlabs_api_key",
         "DATABASE_URL": "database_url",
-        "REDIS_URL": "redis_url",
-        "ENVIRONMENT": "environment",
         "LOG_LEVEL": "log_level",
     }
     for env_var, field_name in env_keys.items():
@@ -458,9 +448,6 @@ def load_settings(
     sip_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
     if sip_trunk_id:
         merged.setdefault("telephony", {})["sip_trunk_id"] = sip_trunk_id
-    sip_phone_id = os.getenv("SIP_PHONE_NUMBER_ID")
-    if sip_phone_id:
-        merged.setdefault("telephony", {})["sip_phone_number_id"] = sip_phone_id
 
     # 4. Dispatch Overrides
     if overrides:

@@ -10,6 +10,7 @@ dependencies = [
     "livekit-plugins-google==1.8.10",
     "livekit-plugins-deepgram==1.8.10",
     "livekit-plugins-silero==1.8.10",
+    "google-genai>=2.34.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "python-dotenv>=1.0.1",
@@ -47,8 +48,6 @@ packages = ["src"]
 line-length = 100
 target-version = "py312"
 exclude = [
-    "reference",
-    "spikes",
     ".venv",
 ]
 

@@ -123,9 +123,3 @@ def configure_logging(level: int = logging.INFO) -> None:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(StructuredJsonFormatter())
     root_logger.addHandler(console_handler)
-
-
-def get_logger(name: str) -> logging.Logger:
-    """Obtain a logger instance with the given name."""
-    return logging.getLogger(name)
-

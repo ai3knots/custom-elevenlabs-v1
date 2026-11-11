@@ -65,12 +65,12 @@ async def run_smoke_test() -> bool:
     try:
         telephony = MockTelephonyProvider()
         call_req = CallRequest(
+            call_id="conv_smoke_test_1",
             phone="+14045551234",
             dynamic_variables=dyn,
         )
         dispatch_res = await telephony.dial(call_req, room_name="smoke_test_room")
-        assert dispatch_res.call_id.startswith("conv_")
-        await telephony.hangup("smoke_test_room", dispatch_res.participant_id)
+        assert dispatch_res.call_id == "conv_smoke_test_1"
         print("  [PASS] 4. Telephony Abstraction (Mock & Dispatch Interface)")
     except Exception as e:
         print(f"  [FAIL] 4. Telephony: {e}")
@@ -87,8 +87,13 @@ async def run_smoke_test() -> bool:
         call_id = dispatch_res.call_id if dispatch_res else "conv_smoke_test_1"
         first_text = first_msg if "first_msg" in locals() else "Hello"
         await recorder.create_call(call_id=call_id, phone="+14045551234")
-        await recorder.record_transcript(call_id=call_id, role="agent", message=first_text)
-        await recorder.record_transcript(call_id=call_id, role="user", message="Yes, speaking.")
+        await recorder.record_transcript_batch(
+            call_id,
+            [
+                {"role": "agent", "message": first_text, "time_in_call_secs": 1.0},
+                {"role": "user", "message": "Yes, speaking.", "time_in_call_secs": 3.0},
+            ],
+        )
 
         accumulator = CostAccumulator()
         accumulator.add_stt_usage("nova-3", audio_seconds=12.5)

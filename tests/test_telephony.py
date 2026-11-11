@@ -18,6 +18,7 @@ from src.telephony import (
 
 def _make_call_request(phone: str = "+14045551234", trunk_id: str | None = None) -> CallRequest:
     return CallRequest(
+        call_id="conv_test_1",
         phone=phone,
         persona="amelia",
         language="en",
@@ -37,24 +38,19 @@ async def test_mock_telephony_provider() -> None:
 
     # 1. Successful dial
     res = await provider.dial(req, room_name="room_123")
-    assert res.call_id.startswith("conv_")
+    assert res.call_id == "conv_test_1"
     assert res.room_name == "room_123"
     assert res.participant_id.startswith("part_")
     assert res.call_sid is not None and res.call_sid.startswith("CA")
     assert len(provider.dispatched_calls) == 1
 
-    # 2. Hangup
-    await provider.hangup("room_123", res.participant_id)
-    assert len(provider.hung_up_calls) == 1
-    assert provider.hung_up_calls[0] == ("room_123", res.participant_id)
-
-    # 3. Simulated failure
+    # 2. Simulated failure
     provider.should_fail = True
     provider.failure_message = "Simulated carrier error"
     with pytest.raises(RuntimeError, match="Simulated carrier error"):
         await provider.dial(req, room_name="room_456")
 
-    # 4. Close
+    # 3. Close
     await provider.close()
 
 
@@ -65,19 +61,16 @@ async def test_console_telephony_provider() -> None:
     req = _make_call_request()
 
     res = await provider.dial(req, room_name="console_room_1")
-    assert res.call_id.startswith("conv_")
+    assert res.call_id == "conv_test_1"
     assert res.room_name == "console_room_1"
     assert res.participant_id.startswith("console_")
     assert len(provider.dispatched_calls) == 1
-
-    await provider.hangup("console_room_1", res.participant_id)
-    assert len(provider.hung_up_calls) == 1
 
     await provider.close()
 
 
 @pytest.mark.asyncio
-async def test_livekit_sip_provider_dial_and_hangup() -> None:
+async def test_livekit_sip_provider_dial() -> None:
     """Test LiveKitSIPProvider dispatch and SIP participant creation with mocked LiveKitAPI."""
     mock_lkapi = MagicMock()
     mock_lkapi.agent_dispatch = MagicMock()
@@ -121,17 +114,10 @@ async def test_livekit_sip_provider_dial_and_hangup() -> None:
     assert sip_call_arg.participant_attributes["call_id"] == res.call_id
 
     # 3. Verify returned result
-    assert res.call_id.startswith("conv_")
+    assert res.call_id == "conv_test_1"
     assert res.room_name == "sip_room_1"
     assert res.participant_id == "part_livekit_999"
     assert res.sip_call_id == "sip_livekit_call_888"
-
-    # 4. Verify hangup
-    await provider.hangup("sip_room_1", "part_livekit_999")
-    mock_lkapi.room.remove_participant.assert_awaited_once()
-    remove_arg = mock_lkapi.room.remove_participant.call_args[0][0]
-    assert remove_arg.room == "sip_room_1"
-    assert remove_arg.identity == "part_livekit_999"
 
     # 5. Verify close
     await provider.close()
@@ -192,3 +178,13 @@ async def test_livekit_trunk_choice_ignores_leadgen_number_ids(requested: str | 
     await provider.dial(_make_call_request(trunk_id=requested), room_name="room")
 
     assert mock_lkapi.sip.create_sip_participant.call_args[0][0].sip_trunk_id == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider", [MockTelephonyProvider(), ConsoleTelephonyProvider()])
+async def test_dialing_without_a_call_id_is_an_error(provider: object) -> None:
+    """The API assigns the call id before dialing; a provider never invents one."""
+    request = _make_call_request()
+    request.call_id = None
+    with pytest.raises(ValueError, match="call_id must be set"):
+        await provider.dial(request, room_name="room")  # type: ignore[attr-defined]

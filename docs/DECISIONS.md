@@ -60,7 +60,7 @@ LiveKit offers two pathways to LLMs:
 
 ### Evaluation
 - **Control & Pricing:** We self-host and bring our own API keys. Routing through LiveKit Inference adds latency, dependency on LiveKit Cloud's model proxy catalog, and external billing.
-- **Model Availability:** `gemini-3.5-flash` and `gemini-3.5-flash-lite` are verified available directly on Google's v1beta endpoint using `GEMINI_API_KEY` [VERIFIED via `spikes/check_gemini.py`].
+- **Model Availability:** `gemini-3.5-flash` and `gemini-3.5-flash-lite` are verified available directly on Google's v1beta endpoint using `GEMINI_API_KEY`.
 - **Configuration Granularity:** `livekit-plugins-google.LLM` supports `thinking_config={"thinking_level": "MINIMAL"}` and `temperature=0.0` directly [VERIFIED].
 
 ### Decision
@@ -198,4 +198,4 @@ Superseding "Single Agent + Explicit State Machine" above. The agent is one `Per
 (Steps A to F), the knowledge base appended, and three tools (`end_call`, `skip_turn`, `voicemail_detection`). Reasons: no `transition`
 round trip (it added 2 to 3 s to the turns that changed state), no FSM/tool race conditions, and parity with the ElevenLabs agent
 `agent_2701m6e2fw2eehd97r93d4v8x9yc`. The outcome is decided after the call by a classifier instead of a tool the model could forget or misuse.
-Trade-off: the model tracks the step itself, so it needs scenario testing. Details in `docs/SINGLE_PROMPT_MIGRATION_PLAN.md`.
+Trade-off: the model tracks the step itself, so it needs scenario testing.

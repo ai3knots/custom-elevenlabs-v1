@@ -1,11 +1,11 @@
-# Posivex voice agent stack.
+# Posivex API stack: Postgres and the API (with the webhook outbox worker).
 #
-# LiveKit (signaling, media and SIP) runs on LiveKit Cloud. Only the agent worker,
-# the API and Postgres run here. The agent makes outbound connections to LiveKit
-# Cloud, so no inbound SIP/RTP port forwarding is needed on this host.
+# The voice agent runs on LiveKit Cloud (deploy it with scripts/deploy_agent.py), not here. It reports each
+# finished call to this API over HTTPS (RESULTS_CALLBACK_URL), so Postgres is only reachable from this stack.
 #
-# Required in .env: LIVEKIT_URL (wss://<project>.livekit.cloud), LIVEKIT_API_KEY,
-# LIVEKIT_API_SECRET, SIP_OUTBOUND_TRUNK_ID and the AI provider keys.
+# Required in .env: LIVEKIT_URL (wss://<project>.livekit.cloud), LIVEKIT_API_KEY, LIVEKIT_API_SECRET,
+# SIP_OUTBOUND_TRUNK_ID, TELEPHONY_PROVIDER=livekit_sip, POSIVEX_API_KEY, ELEVENLABS_WEBHOOK_SECRET,
+# LEAD_GEN_WEBHOOK_URL, RESULTS_CALLBACK_SECRET and the AI provider keys (see .env.example).
 services:
   postgres:
     image: postgres:16-alpine
@@ -22,26 +22,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  posivex_agent:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: posivex_agent
-    restart: unless-stopped
-    command: ["agent", "start", "--persona", "amelia"]
-    env_file:
-      - .env
-    # Lets the containers reach services on this machine (for example lead-gen on its own port) as
-    # http://host.docker.internal:<port> if the public URL cannot be reached from inside the host.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      - LIVEKIT_AGENT_NAME=posivex-agent
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-posivex}:${POSTGRES_PASSWORD:-posivex_secure_pass}@postgres:5432/${POSTGRES_DB:-posivex_calls}
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   posivex_api:
     build:

@@ -29,9 +29,6 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Pre-download LiveKit plugin model assets during build
-RUN uv run python -m livekit.agents download-files
-
 # Stage 2: Minimal runtime image running as non-root
 FROM python:3.12-slim-bookworm AS runtime
 

@@ -6,7 +6,7 @@ import logging
 import uuid
 
 from src.config import CallRequest
-from src.telephony.base import DispatchResult, TelephonyProvider
+from src.telephony.base import DispatchResult, TelephonyProvider, require_call_id
 
 logger = logging.getLogger("posivex.telephony.console")
 
@@ -16,10 +16,9 @@ class ConsoleTelephonyProvider(TelephonyProvider):
 
     def __init__(self) -> None:
         self.dispatched_calls: list[tuple[CallRequest, str]] = []
-        self.hung_up_calls: list[tuple[str, str]] = []
 
     async def dial(self, request: CallRequest, room_name: str) -> DispatchResult:
-        call_id = request.call_id or f"conv_{uuid.uuid4().hex[:14]}"
+        call_id = require_call_id(request)
         logger.info(
             "[CONSOLE TELEPHONY] Dialing %s in room %s (Persona: %s)",
             request.phone,
@@ -36,14 +35,6 @@ class ConsoleTelephonyProvider(TelephonyProvider):
         )
         self.dispatched_calls.append((request, room_name))
         return result
-
-    async def hangup(self, room_name: str, participant_id: str) -> None:
-        logger.info(
-            "[CONSOLE TELEPHONY] Hangup participant %s in room %s",
-            participant_id,
-            room_name,
-        )
-        self.hung_up_calls.append((room_name, participant_id))
 
     async def close(self) -> None:
         logger.info("[CONSOLE TELEPHONY] Provider closed.")

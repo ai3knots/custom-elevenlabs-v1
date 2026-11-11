@@ -35,6 +35,7 @@ from tests.support.fake_call import (
     sip_callee,
     wait_until,
 )
+from tests.support.mock_providers import MockLLM, MockSTT, MockTTS, MockVAD
 
 FIRST_MESSAGE = "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of Apex Pizza?"
 DESTINATION = "http://localhost:3000/api/webhooks/elevenlabs"
@@ -43,10 +44,6 @@ DESTINATION = "http://localhost:3000/api/webhooks/elevenlabs"
 def make_settings(*, detector: bool = False, **conversation: Any) -> Settings:
     return Settings(
         gemini_api_key="test-key" if detector else "",
-        stt={"provider": "mock"},  # type: ignore[arg-type]
-        llm={"provider": "mock"},  # type: ignore[arg-type]
-        tts={"provider": "mock"},  # type: ignore[arg-type]
-        vad={"provider": "mock"},  # type: ignore[arg-type]
         recording={"enabled": False},  # type: ignore[arg-type]
         conversation={  # type: ignore[arg-type]
             "opener_delay_seconds": 0.0,
@@ -98,6 +95,10 @@ def make_harness(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Harness]:
         return OutcomeResult("callback_set", "Stub rationale.", "Stub summary.")
 
     monkeypatch.setattr(session_handler, "classify_transcript", stub_classifier)
+    monkeypatch.setattr(session_handler, "get_stt", lambda *a, **k: MockSTT())
+    monkeypatch.setattr(session_handler, "get_tts", lambda *a, **k: MockTTS())
+    monkeypatch.setattr(session_handler, "get_vad", lambda *a, **k: MockVAD())
+    monkeypatch.setattr(session_handler, "get_llm", lambda *a, **k: MockLLM())
     monkeypatch.setattr(session_handler, "GeminiGreetingClassifier", FakeClassifier)
     FakeClassifier.verdict = GreetingVerdict("human", 0.95, 0.1)
     FakeClassifier.asked = []

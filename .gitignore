@@ -31,7 +31,6 @@ share/python-wheels/
 venv/
 ENV/
 env/
-lk_inspect_venv/
 
 # Testing & Linting
 .pytest_cache/

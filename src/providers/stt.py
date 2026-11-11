@@ -9,7 +9,6 @@ from livekit.agents import stt
 from livekit.plugins import deepgram
 
 from src.config import STTConfig
-from src.providers.mock import MockSTT
 
 
 def get_stt(config: STTConfig, api_key: str | None = None) -> stt.STT:
@@ -17,11 +16,7 @@ def get_stt(config: STTConfig, api_key: str | None = None) -> stt.STT:
 
     Supports:
     - 'deepgram': Deepgram Nova-3 in fixed language ('en-US', 'es') or multilingual ('multi') mode.
-    - 'mock': MockSTT producing deterministic local transcriptions for tests and dry runs.
     """
-    if config.provider == "mock":
-        return MockSTT()
-
     if config.provider == "deepgram":
         resolved_key = api_key if api_key is not None else os.getenv("DEEPGRAM_API_KEY")
         if not resolved_key:
@@ -48,9 +43,6 @@ def get_stt(config: STTConfig, api_key: str | None = None) -> stt.STT:
             deepgram_kwargs["language"] = config.language or "en-US"
 
         return deepgram.STT(**deepgram_kwargs)
-
-    if config.provider == "assemblyai":
-        raise NotImplementedError("AssemblyAI STT provider is deferred to future phase.")
 
     raise ValueError(f"Unsupported STT provider: {config.provider}")
 

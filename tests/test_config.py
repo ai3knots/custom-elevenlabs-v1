@@ -16,8 +16,6 @@ def test_load_defaults():
     settings = load_settings(persona="amelia")
     assert isinstance(settings, Settings)
     assert settings.persona == "amelia"
-    assert settings.display_name == "Amelia"
-    assert settings.gender == "female"
     assert settings.stt.provider == "deepgram"
     assert settings.stt.model == "nova-3"
     assert settings.llm.provider == "google"
@@ -32,8 +30,6 @@ def test_persona_layering_michael():
     """Verify that Michael profile overrides persona-specific values while keeping defaults."""
     settings = load_settings(persona="michael")
     assert settings.persona == "michael"
-    assert settings.display_name == "Michael"
-    assert settings.gender == "male"
     assert settings.tts.voice_id == "flq6f7yk4E4fJM5XTYuZ"
     # Shared defaults remain intact
     assert settings.stt.model == "nova-3"
@@ -43,12 +39,12 @@ def test_persona_layering_michael():
 def test_dispatch_overrides():
     """Verify that dispatch metadata overrides deep-merge over profiles and defaults."""
     overrides = {
-        "stt": {"provider": "mock", "language_mode": "multi"},
+        "stt": {"language_mode": "multi"},
         "llm": {"temperature": 0.3},
         "tts": {"voice_id": "custom_override_voice"},
     }
     settings = load_settings(persona="amelia", overrides=overrides)
-    assert settings.stt.provider == "mock"
+    assert settings.stt.provider == "deepgram"  # preserved from defaults
     assert settings.stt.language_mode == "multi"
     assert settings.stt.model == "nova-3"  # Preserved from defaults
     assert settings.llm.temperature == 0.3

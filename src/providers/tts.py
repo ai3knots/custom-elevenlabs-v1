@@ -9,7 +9,6 @@ from livekit.agents import tts
 from livekit.plugins import elevenlabs
 
 from src.config import TTSConfig
-from src.providers.mock import MockTTS
 
 
 def get_tts(config: TTSConfig, api_key: str | None = None) -> tts.TTS:
@@ -17,11 +16,7 @@ def get_tts(config: TTSConfig, api_key: str | None = None) -> tts.TTS:
 
     Supports:
     - 'elevenlabs': ElevenLabs conversational v3 or multilingual v2 streaming via WebSockets.
-    - 'mock': MockTTS producing silent audio frames for offline unit testing.
     """
-    if config.provider == "mock":
-        return MockTTS()
-
     if config.provider == "elevenlabs":
         resolved_key = api_key if api_key is not None else os.getenv("ELEVENLABS_API_KEY")
         if not resolved_key:

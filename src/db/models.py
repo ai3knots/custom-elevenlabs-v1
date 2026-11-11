@@ -204,35 +204,6 @@ class WebhookOutbox(Base):
     call: Mapped[Call] = relationship("Call", back_populates="webhook_outbox")
 
 
-class AgentConfigVersion(Base):
-    """Immutable version snapshot of agent configurations for audit and rollback."""
-
-    __tablename__ = "agent_config_versions"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    version_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    persona: Mapped[str] = mapped_column(String(32), nullable=False)
-    config_yaml: Mapped[str] = mapped_column(Text, nullable=False)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
-class Experiment(Base):
-    """A/B experiment assignment and performance metric tracking."""
-
-    __tablename__ = "experiments"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    variant: Mapped[str] = mapped_column(String(32), nullable=False)
-    call_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("calls.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    metric_name: Mapped[str] = mapped_column(String(64), nullable=False)
-    metric_value: Mapped[float] = mapped_column(Float, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
 # Create multi-column indexes for fast queries
 Index("idx_calls_lead_status", Call.lead_id, Call.status)
 Index("idx_outbox_status_retry", WebhookOutbox.status, WebhookOutbox.next_retry_at)

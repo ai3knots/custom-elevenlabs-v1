@@ -1,4 +1,4 @@
-> **Historical:** this guide covers the self-hosted `livekit/sip` setup behind a home router, which was replaced by LiveKit Cloud SIP (see `docs/RUNBOOK.md` section 3.1). It is kept for reference only.
+> **Historical:** this guide covers the self-hosted `livekit/sip` setup behind a home router, which was replaced by LiveKit Cloud SIP (see `docs/RUNBOOK.md` section 3.1). It is kept for reference only; the commands in it refer to `scripts/call.py` (removed) and compose services (`sip`, `livekit-server`, `posivex_agent`) that no longer exist.
 
 # SIP / Network Debug Guide: "Call is answered but there is no audio"
 

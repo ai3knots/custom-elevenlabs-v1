@@ -1,8 +1,6 @@
-"""SQLAlchemy 2 async session engine, declarative base, and dependency helper."""
+"""SQLAlchemy 2 async engine, sessionmaker and declarative base."""
 
 from __future__ import annotations
-
-from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncAttrs,
@@ -36,17 +34,3 @@ def get_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
         expire_on_commit=False,
         class_=AsyncSession,
     )
-
-
-async def get_db_session(
-    sessionmaker: async_sessionmaker[AsyncSession],
-) -> AsyncGenerator[AsyncSession, None]:
-    """Provide a transactional scope around a series of operations."""
-    async with sessionmaker() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-

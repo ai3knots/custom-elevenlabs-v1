@@ -333,17 +333,3 @@ class CallRecorder:
             call.updated_at = datetime.now(UTC)
             await session.commit()
             return call
-
-    async def get_recent_call_by_phone(self, phone: str) -> Call | None:
-        """Fetch the most recent call record for a given phone number."""
-        async with self.session_factory() as session:
-            stmt = (
-                select(Call)
-                .where(Call.phone == phone)
-                .order_by(Call.created_at.desc())
-                .limit(1)
-            )
-            res = await session.execute(stmt)
-            return res.scalar_one_or_none()
-
-

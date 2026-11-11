@@ -6,7 +6,6 @@ from livekit.agents import vad
 from livekit.plugins import silero
 
 from src.config import VADConfig
-from src.providers.mock import MockVAD
 
 
 def get_vad(config: VADConfig) -> vad.VAD:
@@ -14,11 +13,7 @@ def get_vad(config: VADConfig) -> vad.VAD:
 
     Supports:
     - 'silero': Silero VAD with configurable speech/silence thresholds.
-    - 'mock': MockVAD for offline dry runs and test execution.
     """
-    if config.provider == "mock":
-        return MockVAD()
-
     if config.provider == "silero":
         return silero.VAD.load(
             min_speech_duration=config.min_speech_duration,

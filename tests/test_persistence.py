@@ -107,21 +107,19 @@ async def test_call_recorder_end_to_end(async_session_factory):
     assert event.state == "conversation"
 
     # 3. Record Transcripts
-    t1 = await recorder.record_transcript(
-        call_id=call_id,
-        role="agent",
-        message="Hi, this is Amelia from Clover Posivex.",
-        time_in_call_secs=1.5,
+    stored = await recorder.record_transcript_batch(
+        call_id,
+        [
+            {"role": "agent", "message": "Hi, this is Amelia from Clover Posivex.", "time_in_call_secs": 1.5},
+            {"role": "user", "message": "Yes, speaking.", "time_in_call_secs": 4.2},
+        ],
     )
-    assert t1.message == "Hi, this is Amelia from Clover Posivex."
-
-    t2 = await recorder.record_transcript(
-        call_id=call_id,
-        role="user",
-        message="Yes, speaking.",
-        time_in_call_secs=4.2,
-    )
-    assert t2.role == "user"
+    assert stored == 2
+    rows = await recorder.get_transcripts(call_id)
+    assert [(t.role, t.message) for t in rows] == [
+        ("agent", "Hi, this is Amelia from Clover Posivex."),
+        ("user", "Yes, speaking."),
+    ]
 
     # 4. Record Usages
     acc = CostAccumulator()

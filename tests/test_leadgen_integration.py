@@ -36,7 +36,6 @@ async def env() -> AsyncGenerator[SimpleNamespace, None]:
 
     telephony = MockTelephonyProvider()
     settings = Settings(
-        environment="development",
         elevenlabs_api_key="real-elevenlabs-key",
         voice_api_key="voice-key",
         results_callback_secret="cb-secret",

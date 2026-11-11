@@ -26,7 +26,7 @@ The Posivex Voice Calling service is a modular, high-performance voice AI soluti
 |   +---------------------+             +---------------------------+   |
 |   |   FastAPI Service   | <---------> |  Transactional Outbox     |   |
 |   |  - /v1/convai/*     |             |  - Worker (Exp. Backoff)  |   |
-|   |  - /api/v1/calls    |             |  - HMAC Signature Header  |   |
+|   |  - /internal/*      |             |  - HMAC Signature Header  |   |
 |   |  - /health & metrics|             +-------------+-------------+   |
 |   +----------+----------+                           |                 |
 |              |                                      |                 |
@@ -98,7 +98,6 @@ Copy `.env.example` to `.env` and configure credentials:
 
 | Environment Variable | Description | Default / Example |
 |---|---|---|
-| `ENVIRONMENT` | Deployment environment (`development`, `staging`, `production`) | `production` |
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 | `DATABASE_URL` | PostgreSQL AsyncPG connection string | `postgresql+asyncpg://posivex:posivex@localhost:5432/posivex_calls` |
 | `LIVEKIT_URL` | LiveKit Cloud project WebSocket URL | `wss://<project>.livekit.cloud` |
@@ -135,7 +134,7 @@ The agent is one system prompt (`prompts/<persona>/system.j2`, Steps A to F) plu
 - If the model says a goodbye but forgets `end_call`, the call is ended 2.5 s after the goodbye (`CLOSING_GRACE_SECS`).
 - The call outcome is decided after the call by one structured Gemini call over the transcript (`src/analysis/outcome.py`, rules in `prompts/analysis/call_outcome.md`). An answering-machine verdict or the voicemail tool forces `voicemail` / `automated_menu`; no caller speech gives `hangup_no_speak`; a classifier failure gives `other`.
 
-The Amelia knowledge base lives at `prompts/knowledge/Knowledge-base.md` (not under `reference/`, which is excluded from the Docker image). If you re-export it from ElevenLabs, copy it there. A missing file is logged as an error and the call continues without a knowledge base.
+The Amelia knowledge base lives at `prompts/knowledge/Knowledge-base.md`. If you re-export it from ElevenLabs, copy it there. A missing file is logged as an error and the call continues without a knowledge base.
 
 ### 3.1 LiveKit Cloud SIP Setup
 
@@ -154,7 +153,7 @@ Signaling, media and SIP are hosted by LiveKit Cloud. The agent worker only make
    `lk sip outbound update --id <ST_...> --destination-country us` (only that field changes).
    This pins the phone leg only. The LiveKit room, the agent (`--region`, `us-east`) and the recording bucket are
    separate settings.
-3. Start the stack: `docker compose up -d --build`. The agent registers with Cloud as `posivex-agent`.
+3. Start the API stack: `docker compose up -d --build posivex_api`. The agent is deployed to LiveKit Cloud separately (`scripts/deploy_agent.py`, section 7) and registers as `posivex-agent`.
 4. Telnyx authenticates the trunk by username and password. If the Telnyx SIP connection is restricted by IP, allow LiveKit Cloud's static ranges (Static IPs docs) or `0.0.0.0/0`.
 
 The older self-hosted SIP debugging notes are in `docs/SIP_NETWORK_DEBUG_GUIDE.md` (historical).
@@ -179,6 +178,19 @@ uv run alembic revision --autogenerate -m "describe_changes"
 uv run alembic downgrade -1
 ```
 
+**On the server** the runtime image has no `uv`, and Postgres is not published to the host, so run Alembic inside the API
+container (it already has `DATABASE_URL`, `alembic.ini` and the `alembic` command on its `PATH`). Rebuild first so the container
+has the new migration file:
+
+```bash
+docker compose up -d --build posivex_api
+docker compose exec posivex_api alembic current            # expect: b7c41e5a9d20 (head) after the upgrade, 19ddfd7201e0 before
+docker compose exec posivex_api alembic upgrade head
+```
+
+If `alembic current` prints nothing, the database was not created by Alembic (the tables exist but there is no
+`alembic_version` row): run `docker compose exec posivex_api alembic stamp 19ddfd7201e0` first, then `upgrade head`.
+
 ---
 
 ## 5. Health Probes & Monitoring
@@ -195,11 +207,7 @@ uv run alembic downgrade -1
 - **Metrics Scrape URL:** `GET http://localhost:8000/metrics`
 - **Key Metrics Tracked:**
   - `posivex_calls_total{persona, language, status}`
-  - `posivex_call_outcomes_total{persona, outcome}`
-  - `posivex_call_duration_seconds{persona}` (Histogram with buckets 5s to 900s)
-  - `posivex_cost_dollars_total{provider, metric_type}`
   - `posivex_webhook_deliveries_total{status}`
-  - `posivex_active_calls` (Gauge)
 
 ### 5.3 Logging & Sensitive Data Redaction
 - All log lines are emitted as single-line structured JSON with `call_id` context propagation.
@@ -245,7 +253,7 @@ ElevenLabs-compatible API instead of `https://api.elevenlabs.io` (this needs the
 
 | Lead-gen calls | Handled by |
 |---|---|
-| `POST /v1/convai/sip-trunk/outbound-call` (and `/twilio/`) | `convai_emulation.py`: creates the call row, picks the persona from `agent_id`, dials through LiveKit |
+| `POST /v1/convai/sip-trunk/outbound-call` | `convai_emulation.py`: creates the call row, picks the persona from `agent_id`, dials through LiveKit |
 | `GET /v1/convai/agents`, `GET /v1/convai/phone-numbers` | `convai_read.py`: the agents and numbers from `config/defaults.yaml` (`agents:`, `phone_numbers:`) |
 | `GET /v1/convai/conversations`, `/{id}` | `convai_read.py`: the same conversation shape ElevenLabs returns (transcript, tool calls, metadata, analysis) |
 | `GET /v1/convai/conversations/{id}/audio` | `convai_read.py`: streams the recording from the bucket (404 until a recording exists) |
@@ -332,9 +340,10 @@ over HTTPS (7.3), so it never needs the database.
    ```
    The script sends only what the agent needs from `.env.prod` (never `LIVEKIT_*`, the database or webhook settings),
    through a temporary file it deletes. The region defaults to `us-east` (`--region` to change it).
-4. **Cut over.** The Cloud agent registers under the same name (`posivex-agent`) as the one in docker compose, so while both run
-   a call can land on either. Once `lk agent status` shows it running and a test call works, stop the server's worker:
-   `docker compose stop posivex_agent`. To go back: `docker compose start posivex_agent`, then `lk agent delete` or `lk agent rollback`.
+4. **No worker on the server.** The compose file no longer has an agent service, so nothing on your server can take a call. If an old
+   `posivex_agent` container from an earlier compose file still exists there, remove it (it would register under the same
+   name as the Cloud agent): `docker compose up -d --build --remove-orphans posivex_api`, or `docker rm -f posivex_agent`.
+   To roll the agent back, use `lk agent rollback`.
 5. **Watch it:** `lk agent logs`, `lk agent status`. Calls still finish through the API's outbox to lead-gen.
 
 On the Build plan the agent scales to zero when idle, so the first call after a quiet period waits roughly 10 to 20 seconds

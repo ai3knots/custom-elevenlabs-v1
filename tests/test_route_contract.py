@@ -60,8 +60,8 @@ async def env() -> AsyncGenerator[SimpleNamespace, None]:
     await engine.dispose()
 
 
-async def dial(env: SimpleNamespace, path: str = "/v1/convai/sip-trunk/outbound-call", **body: Any) -> httpx.Response:
-    return await env.client.post(path, headers=KEY, json={**DIAL_BODY, **body})
+async def dial(env: SimpleNamespace, **body: Any) -> httpx.Response:
+    return await env.client.post("/v1/convai/sip-trunk/outbound-call", headers=KEY, json={**DIAL_BODY, **body})
 
 
 async def finished_call(env: SimpleNamespace, outcome: str = "callback_set") -> str:
@@ -96,9 +96,6 @@ def test_route_table(env: SimpleNamespace) -> None:
     paths = env.app.openapi()["paths"]
     actual = sorted((p, m.upper()) for p, ops in paths.items() for m in ops)
     assert actual == [
-        ("/api/v1/calls", "POST"),
-        ("/api/v1/calls/{call_id}", "GET"),
-        ("/api/webhooks/elevenlabs/initiation", "POST"),
         ("/health", "GET"),
         ("/health/", "GET"),
         ("/health/live", "GET"),
@@ -111,7 +108,6 @@ def test_route_table(env: SimpleNamespace) -> None:
         ("/v1/convai/conversations/{conversation_id}/audio", "GET"),
         ("/v1/convai/phone-numbers", "GET"),
         ("/v1/convai/sip-trunk/outbound-call", "POST"),
-        ("/v1/convai/twilio/outbound-call", "POST"),
     ]
 
 
@@ -153,9 +149,8 @@ async def test_metrics_are_prometheus_text(env: SimpleNamespace) -> None:
 
 
 # ---- dialing -----------------------------------------------------------------------------------------
-@pytest.mark.parametrize("path", ["/v1/convai/sip-trunk/outbound-call", "/v1/convai/twilio/outbound-call"])
-async def test_dial_success_shape(env: SimpleNamespace, path: str) -> None:
-    res = await dial(env, path)
+async def test_dial_success_shape(env: SimpleNamespace) -> None:
+    res = await dial(env)
     assert res.status_code == 200
     body = res.json()
     assert body.keys() == {"success", "conversation_id", "callSid", "sip_call_id"}
@@ -174,8 +169,8 @@ async def test_dial_records_the_call_and_its_events(env: SimpleNamespace) -> Non
     assert env.telephony.dispatched_calls[0][1] == f"call_{call_id}"
 
 
-@pytest.mark.parametrize("path", ["/v1/convai/sip-trunk/outbound-call", "/v1/convai/twilio/outbound-call"])
-async def test_dial_requires_the_api_key(env: SimpleNamespace, path: str) -> None:
+async def test_dial_requires_the_api_key(env: SimpleNamespace) -> None:
+    path = "/v1/convai/sip-trunk/outbound-call"
     missing = await env.client.post(path, json=DIAL_BODY)
     wrong = await env.client.post(path, headers={"xi-api-key": "nope"}, json=DIAL_BODY)
     assert (missing.status_code, missing.json()) == (401, {"detail": "Invalid or missing xi-api-key"})
@@ -322,19 +317,6 @@ async def test_audio_404_explains_why_there_is_nothing_to_play(env: SimpleNamesp
     res = await env.client.get(f"/v1/convai/conversations/{call_id}/audio", headers=KEY)
     assert res.status_code == 404
     assert res.json() == {"detail": "Recording is turned off on the voice service (RECORDING_ENABLED is not true)."}
-
-
-async def test_inbound_initiation_lookup_shape(env: SimpleNamespace) -> None:
-    res = await env.client.post("/api/webhooks/elevenlabs/initiation", json={"caller_id": "+14045559999"})
-    assert res.status_code == 200
-    body = res.json()
-    assert body.keys() == {"type", "dynamic_variables"}
-    assert body["type"] == "conversation_initiation_client_data"
-    assert body["dynamic_variables"].keys() == {
-        "call_direction", "caller_status", "caller_phone", "business_name", "business_context",
-        "current_datetime", "is_followup", "followup_notes", "contact_name",
-    }
-    assert (await env.client.post("/api/webhooks/elevenlabs/initiation", json={})).status_code == 400
 
 
 # ---- the agent's report ------------------------------------------------------------------------------

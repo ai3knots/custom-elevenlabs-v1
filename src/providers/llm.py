@@ -10,7 +10,6 @@ from livekit.agents import llm
 from livekit.plugins import google
 
 from src.config import LLMConfig
-from src.providers.mock import MockLLM
 
 
 def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LLM:
@@ -19,11 +18,7 @@ def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LL
     Supports:
     - 'google': Google Gemini models (e.g. gemini-3.5-flash-lite, gemini-3.5-flash)
       with model-appropriate thinking config and temperature 0.0.
-    - 'mock': MockLLM returning deterministic responses for offline unit tests.
     """
-    if config.provider == "mock":
-        return MockLLM()
-
     if config.provider == "google":
         resolved_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY")
         if not resolved_key:

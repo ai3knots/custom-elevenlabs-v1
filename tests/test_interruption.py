@@ -63,8 +63,6 @@ def test_build_turn_handling_maps_settings():
 
     settings.turn_detector.mode = "stt-only"
     assert build_turn_handling(settings)["turn_detection"] == "stt"
-    settings.turn_detector.mode = "eou"
-    assert build_turn_handling(settings)["turn_detection"] == "vad"
 
 
 def test_build_turn_handling_audio_turn_detector(monkeypatch):

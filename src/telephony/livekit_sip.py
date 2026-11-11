@@ -9,7 +9,7 @@ import uuid
 from livekit import api
 
 from src.config import CallRequest, Settings
-from src.telephony.base import DispatchResult, TelephonyProvider
+from src.telephony.base import DispatchResult, TelephonyProvider, require_call_id
 
 logger = logging.getLogger("posivex.telephony.livekit")
 
@@ -36,7 +36,7 @@ class LiveKitSIPProvider(TelephonyProvider):
 
     async def dial(self, request: CallRequest, room_name: str) -> DispatchResult:
         lkapi = self._get_api()
-        call_id = request.call_id or f"conv_{uuid.uuid4().hex[:14]}"
+        call_id = require_call_id(request)
         # Lead-gen sends its own calling-number id (for example "phnum_posivex_trunk"), which is not a LiveKit
         # trunk id. Only an explicit LiveKit trunk id ("ST_...") overrides the configured trunk.
         requested = request.phone_number_id if (request.phone_number_id or "").startswith("ST_") else None
@@ -95,13 +95,6 @@ class LiveKitSIPProvider(TelephonyProvider):
             participant_id=sip_part.participant_id,
             sip_call_id=sip_part.sip_call_id or f"sip_{uuid.uuid4().hex[:12]}",
             call_sid=f"CA{uuid.uuid4().hex[:16]}",
-        )
-
-    async def hangup(self, room_name: str, participant_id: str) -> None:
-        lkapi = self._get_api()
-        logger.info("Removing participant %s from room %s", participant_id, room_name)
-        await lkapi.room.remove_participant(
-            api.RoomParticipantIdentity(room=room_name, identity=participant_id)
         )
 
     async def close(self) -> None:

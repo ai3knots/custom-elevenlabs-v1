@@ -16,7 +16,6 @@
 To migrate cleanly without touching `Posivex-lead-gen`:
 - The LiveKit Calling Service exposes an **ElevenLabs Emulation Web API layer** (`/v1/convai/*`).
 - Post-call completion events are emitted via an **ElevenLabs Webhook Adapter** utilizing HMAC-SHA256 signatures matching ElevenLabs' exact format.
-- A native **LiveKit CallRequest API** (`POST /api/v1/calls`) is provided simultaneously for modern clients.
 
 ---
 
@@ -25,8 +24,7 @@ To migrate cleanly without touching `Posivex-lead-gen`:
 ### 2.1 Emulated ElevenLabs Endpoints
 
 `Posivex-lead-gen` calls:
-- `POST /v1/convai/sip-trunk/outbound-call` (when phone number provider is SIP trunk)
-- `POST /v1/convai/twilio/outbound-call` (when phone number provider is Twilio)
+- `POST /v1/convai/sip-trunk/outbound-call`. Our `/v1/convai/phone-numbers` lists every number with provider `sip_trunk`, so lead-gen never picks the Twilio route (`/v1/convai/twilio/outbound-call`), and this service does not provide it.
 
 **Headers Required:**
 ```http
@@ -226,30 +224,18 @@ class CallRequest(BaseModel):
 
 ---
 
-## 4. Inbound Initiation Webhook Contract (`/api/webhooks/elevenlabs/initiation`)
+## 4. Inbound Initiation Webhook (not provided by this service)
 
-When an inbound call arrives, ElevenLabs queries the backend:
-- **Endpoint:** `POST /api/webhooks/elevenlabs/initiation`
+Lead-gen serves its own `POST /api/webhooks/elevenlabs/initiation` (on its own domain) for inbound calls; ElevenLabs calls it
+there. This service does not implement it (`supports_inbound` is `false` in `/v1/convai/phone-numbers`), so inbound calls
+stay on ElevenLabs agents. The contract below is lead-gen's, kept for reference.
+
+- **Endpoint (lead-gen):** `POST /api/webhooks/elevenlabs/initiation`
 - **Auth Header:** `X-Initiation-Secret: <secret>` or `Authorization: Bearer <secret>`
 - **Request Body:** `{ "caller_id": "+14045551234" }`
 - **Response Budget:** 2000 ms timeout.
-- **Expected Return Schema:**
-  ```json
-  {
-    "type": "conversation_initiation_client_data",
-    "dynamic_variables": {
-      "call_direction": "inbound",
-      "caller_status": "known",
-      "caller_phone": "+14045551234",
-      "business_name": "Tony's Pizza & Grill",
-      "business_context": "Business: Tony's Pizza & Grill...",
-      "current_datetime": "Tuesday, October 20, 2026 at 3:42 PM (America/New_York)",
-      "is_followup": "true",
-      "followup_notes": "Callback requested from yesterday",
-      "contact_name": "Tony"
-    }
-  }
-  ```
+- **Response:** `{"type": "conversation_initiation_client_data", "dynamic_variables": {...}}` with `call_direction`, `caller_status`,
+  `caller_phone`, `business_name`, `business_context`, `current_datetime`, `is_followup`, `followup_notes`, `contact_name`.
 
 ---
 

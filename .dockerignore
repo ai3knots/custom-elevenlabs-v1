@@ -30,14 +30,11 @@ recent-calls/
 livekit-recordings/
 
 # Not needed at runtime
-spikes/
-reference/
 testing-frontend/
 frontend/
 node_modules/
 tests/
 docs/
 AUDIT_REPORT.md
-CONTEXT_NOTES.md
 docker-compose*.yml
 scripts/*.ps1

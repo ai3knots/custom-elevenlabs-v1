@@ -1,8 +1,5 @@
-environment: "development"
 log_level: "INFO"
 persona: "amelia"
-display_name: "Amelia"
-gender: "female"
 language: "en"
 
 # Provider Settings
@@ -33,10 +30,8 @@ tts:
   provider: "elevenlabs"
   model: "eleven_v3_conversational"
   voice_id: "eXpIbVcVbLo8ZJQDlDnl" # Amelia voice
-  encoding: "pcm_24000"
   stability: 0.5
   similarity_boost: 0.75
-  expressive: true
 
 vad:
   provider: "silero"
@@ -45,7 +40,7 @@ vad:
   prefix_padding_duration: 0.5
 
 turn_detector:
-  # "vad" | "stt-only" | "v1" | "v1-mini"; multimodal/eou are not available and fall back to vad.
+  # "vad" | "stt-only" | "v1" | "v1-mini"
   # Can be overridden without a rebuild via the TURN_DETECTOR_MODE env var.
   mode: "vad"
 
@@ -97,7 +92,6 @@ kb:
 webhook:
   lead_gen_base_url: "http://localhost:3000"
   webhook_secret: "dev_webhook_secret"
-  max_retries: 10
   retry_backoff_base: 2.0
 
 # Agent ids lead-gen may dial with, and the persona (prompt) behind each. An id that is not listed here

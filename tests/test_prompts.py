@@ -121,12 +121,12 @@ def test_missing_knowledge_base_file_degrades_to_empty():
 
 
 def test_default_knowledge_base_ships_in_a_docker_copied_path():
-    """The KB must live outside reference/ (excluded by .dockerignore) so it is in the image."""
+    """The KB must live under prompts/ so it is in the image."""
     from pathlib import Path
 
     repo = Path(__file__).resolve().parent.parent
     default_path = KBConfig().file_path
-    assert not default_path.startswith("reference/")
+    assert default_path.startswith("prompts/")
     assert (repo / default_path).exists()
     dockerignore = (repo / ".dockerignore").read_text(encoding="utf-8").splitlines()
     ignored_roots = {line.strip().rstrip("/") for line in dockerignore if line.strip()}

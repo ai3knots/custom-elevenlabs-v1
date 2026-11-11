@@ -15,7 +15,6 @@ RATE_LIVEKIT_TRANSPORT_PER_SEC = 0.0040 / 60.0  # $0.0040 / min
 
 # ElevenLabs rates ($ / character)
 RATE_ELEVENLABS_V3_PER_CHAR = 0.15 / 1000.0  # $0.15 per 1k characters
-RATE_ELEVENLABS_TURBO_PER_CHAR = 0.15 / 1000.0
 
 # Gemini rates ($ / token)
 # gemini-3.5-flash-lite: $0.075 / 1M input, $0.30 / 1M output

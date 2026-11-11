@@ -1,6 +1,6 @@
 # Posivex voice platform: architecture as deployed
 
-**Status date:** 10 Nov 2026. This document describes what is running now, not a plan. The older `ARCHITECTURE_PLAN.md` is the original design and is kept for history only.
+**Status date:** 10 Nov 2026. This document describes what is running now, not a plan.
 
 **What the platform is.** A cold-calling system for local US businesses. A lead-generation web app decides who to call and when. A voice service places the call through a phone carrier, an AI agent (Amelia or Michael) holds the conversation, and the result flows back to the lead-gen app, which decides what happens next (retry, follow-up, email, suppression).
 
@@ -70,7 +70,6 @@ Three ideas explain the whole design:
 | Lead-gen emails | Your mail host (`posivex.com`, SMTP 465) | Used by Nodemailer | n/a |
 | Voice API + outbox worker | Your server | Docker container `posivex_api`, command `dev` (API and outbox worker in one process), bound to `127.0.0.1:8000` | `https://api.thebestdevsolutions.space` (nginx proxy) |
 | Voice database (Postgres 16) | Your server | Docker container `posivex_postgres`, volume `postgres_data` | Internal to the Docker network |
-| Server-side voice worker | Your server | Docker container `posivex_agent` (`agent start`). **Should be stopped** (see below) | Connects out to LiveKit Cloud |
 | Cloud voice agent | LiveKit Cloud, region **us-east** | Agent `CA_NQ7cB3ZyKoWg` named `posivex-agent`, version `Ej95aPksCzvi` (deployed 10 Nov 2026), one instance with 2 CPUs and 4 GB, scales to zero | Dispatched by LiveKit per call |
 | Rooms, SIP, egress, observability | LiveKit Cloud | Project `project-3knots-digital-01` (`p_3c1gzyddfo8`), Build plan | `wss://project-3knots-digital-01-sc2w8xlh.livekit.cloud` |
 | Phone carrier | Telnyx | SIP connection used by the LiveKit trunk, number **+1 470 600 0407** | `sip.telnyx.com` |
@@ -80,7 +79,7 @@ Three ideas explain the whole design:
 | Text-to-speech | ElevenLabs API | `eleven_v3_conversational`, voice "Amelia" | Called from the Cloud agent |
 | Legacy voice provider | ElevenLabs Agents | All agents lead-gen does not route to the voice API | Called from lead-gen |
 
-**The server worker problem.** Both the server container `posivex_agent` and the Cloud agent register with LiveKit under the same name (`posivex-agent`), so LiveKit could hand a call to either. The Cloud agent is the intended one. Keep the server container stopped: `docker compose stop posivex_agent`. When redeploying the API use `docker compose up -d --build posivex_api`, because a bare `up -d --build` starts the agent again.
+**No worker on your server.** `docker-compose.yml` defines only Postgres and the API; the agent exists only on LiveKit Cloud, so nothing on the Pakistan server can take a call. An old `posivex_agent` container from earlier compose files may still exist (stopped) on the server: `docker compose up -d --build --remove-orphans posivex_api` removes it, or `docker rm -f posivex_agent`.
 
 **Things this document cannot see from code** and that were configured by hand: the nginx site files on the server (aaPanel), the Telnyx portal (SIP connection, number, billing), the LiveKit dashboard (plan, observability), and the AWS account. They are described from what the code and CLI show.
 
@@ -209,12 +208,11 @@ All `/v1/convai/*` routes need the header `xi-api-key` equal to the voice API ke
 
 | Method and path | Used by | Purpose |
 |---|---|---|
-| `POST /v1/convai/sip-trunk/outbound-call` | lead-gen | Place a call (also `/v1/convai/twilio/outbound-call`, same logic) |
+| `POST /v1/convai/sip-trunk/outbound-call` | lead-gen | Place a call |
 | `GET /v1/convai/agents` | lead-gen | List our agents (`agent_posivex_amelia`, `agent_posivex_michael`) |
 | `GET /v1/convai/phone-numbers` | lead-gen | List our number (`phnum_posivex_trunk`) |
 | `GET /v1/convai/conversations` and `/{id}` | lead-gen | List and read conversations in ElevenLabs format |
 | `GET /v1/convai/conversations/{id}/audio` | lead-gen | Stream the recording from S3 (descriptive 404 when there is none yet) |
-| `POST /api/v1/calls`, `GET /api/v1/calls/{id}` | native clients | Our own call API |
 | `POST /internal/calls/{id}/result` | Cloud agent | Report a finished call. Needs header `X-Posivex-Callback-Secret`. Safe to repeat |
 | `GET /health`, `/health/live`, `/health/ready` | monitoring | Health and database readiness |
 | `GET /metrics` | monitoring | Prometheus metrics |
@@ -235,9 +233,8 @@ Tables in `src/db/models.py`:
 | `transcripts` | Each spoken turn with its time in the call |
 | `usage_costs` | Per-provider usage and estimated cost (tokens, cached tokens, characters, audio seconds) |
 | `webhook_outbox` | Webhooks to deliver: payload, destination, signature, status, attempts, next retry |
-| `agent_config_versions`, `experiments` | Reserved for versioned agent configs; not used in the current flow |
 
-Migrations are managed with Alembic (`uv run alembic upgrade head`, see the runbook). The same Postgres is shared by the API and the outbox worker.
+Migrations are managed with Alembic (see the runbook, section 4, for the exact command on the server). The same Postgres is shared by the API and the outbox worker.
 
 ### 5.5 The webhook outbox
 
@@ -405,7 +402,7 @@ A call is identified by one id (`lk_xxxxxxxxxxxxxx`) everywhere: the Postgres `c
 
 ### 12.1 Deploying the voice API (server)
 
-Pull the repo on the server, then `docker compose up -d --build posivex_api` (only that service, so the server worker stays stopped). Apply database migrations with `uv run alembic upgrade head` when a release adds one (see the runbook). Verify `GET /health/ready`.
+Pull the repo on the server, then `docker compose up -d --build posivex_api`. When a release adds a migration, apply it afterwards with `docker compose exec posivex_api alembic upgrade head` (see the runbook, section 4). Verify `GET /health/ready`.
 
 ### 12.2 Lead-gen
 
@@ -424,7 +421,7 @@ Normal Next.js build and restart; run `npm run db:indexes` after a deploy that a
 
 ### 12.5 Tests
 
-About 190 automated tests (`uv run pytest`) cover the agent logic, the greeting detector, outcome rules, API and lead-gen compatibility, the webhook, persistence and the deploy script. Lint is `uv run ruff check src tests`. No live-call tests exist: new call behaviour is checked by a test round and the session export.
+About 240 automated tests (`uv run pytest`) cover the agent logic, the greeting detector, outcome rules, API and lead-gen compatibility, the webhook, persistence and the deploy script. Lint is `uv run ruff check src tests`. No live-call tests exist: new call behaviour is checked by a test round and the session export.
 
 ---
 
@@ -454,7 +451,7 @@ Defaults live in `config/defaults.yaml` (and `src/config.py`); environment varia
 
 **Regions.** Lead-gen, the voice API, Postgres and the nginx proxy are in Pakistan. The Cloud agent is us-east (Virginia), the S3 bucket us-east-1, and the phone leg is pinned to a US region. Deepgram, Gemini and ElevenLabs are called from the agent (us-east) on their default endpoints. Nothing in Pakistan is in the audio path: only the dial request before the call and the report and webhook after it.
 
-**Latency (one real test call, 11 reply turns).** Median time from the callee stopping to the agent's audio: 3.6 s before the latest changes (end-of-turn wait reaching 4 s on short replies, Gemini time to first token median 1.5 s with a 6.9 s spike, speech-to-text 0.2 to 0.3 s, voice first audio 0.3 s). The end-of-turn cap is now 1.5 s. Gemini time to first token is the largest remaining delay. See `CALL_ANALYSIS_2026-11-10.md`.
+**Latency (one real test call, 11 reply turns).** Median time from the callee stopping to the agent's audio: 3.6 s before the latest changes (end-of-turn wait reaching 4 s on short replies, Gemini time to first token median 1.5 s with a 6.9 s spike, speech-to-text 0.2 to 0.3 s, voice first audio 0.3 s). The end-of-turn cap is now 1.5 s. Gemini time to first token is the largest remaining delay.
 
 **Cost.** About $0.08 per answered minute on the custom stack against about $0.11 to $0.13 on ElevenLabs, with the break-even near 2,900 dials a month and an estimated saving of about $190 a month at 20,000 dials. Prompt caching currently serves about 68% of input tokens. Details and assumptions are in `USAGE_COST_REPORT.md`.
 
@@ -490,4 +487,4 @@ Defaults live in `config/defaults.yaml` (and `src/config.py`); environment varia
 | `src/db/` | SQLAlchemy models and Alembic migrations |
 | `scripts/deploy_agent.py`, `setup_telnyx_trunk.py` | Deploy to LiveKit Cloud; create the SIP trunk |
 | `config/defaults.yaml` | Default settings, agents and phone numbers |
-| `docs/` | `RUNBOOK.md` (operating guide), `CALL_ANALYSIS_2026-11-10.md`, `USAGE_COST_REPORT.md`, `DECISIONS.md`, and this file |
+| `docs/` | `RUNBOOK.md` (operating guide), `USAGE_COST_REPORT.md`, `DECISIONS.md`, and this file |
