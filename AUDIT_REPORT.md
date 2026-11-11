@@ -1,7 +1,6 @@
 # Audit report: Posivex voice agent (Phase 1 and 2)
 
-Status: **audit only. No code, config, or Docker file has been changed.** This file is the only thing added.
-Waiting for approval before any removal or restructuring (see section G for the decisions I need from you).
+Status: **cleanup steps 1 to 5 are done** (see "Outcome of the cleanup" below). Sections A to G are the audit as it was written, before the cleanup; the outcome section says what happened to each finding.
 
 Baseline measured before writing this (so every later step can be compared against it):
 
@@ -14,6 +13,89 @@ Baseline measured before writing this (so every later step can be compared again
 | Installed versions | livekit-agents 1.8.10 (all plugins pinned to it), fastapi 0.162.0, pydantic 2.14.2, sqlalchemy 2.1.6, uvicorn 0.54.0, google-genai 2.34.0 |
 
 Method limits: static reading of every file in `src/`, `scripts/`, `config/`, `alembic/`, Docker files; grep and `vulture` (run once via `uvx`, not added to the project) for unused code; installed-package source for LiveKit behaviour; LiveKit docs pages listed in section C. **I did not build the Docker image, start the API, or place a call**, so Docker findings are from reading the files, and "dead" findings are static (see rule 4: dynamic use is flagged "uncertain", not removed).
+
+
+---
+
+## Outcome of the cleanup
+
+Branch `chore/audit-cleanup`, created from `feat/leadgen-integration` (not from `main`: `main` is 19 commits behind and does not contain the audited code). Six local commits, **not pushed, not deployed, no migration applied anywhere.** Steps 6 (modularize `run_agent_session`), 7 (LiveKit alignment) and 8 (tooling) are **not started**; they wait for your approval.
+
+| Commit | Step | What |
+|---|---|---|
+| `da7aa84` | setup | this report and `docs/ARCHITECTURE.md` |
+| `0206a15` | 1 | safety net: 26 call-flow tests, 26 route-contract tests, fakes in `tests/support/` |
+| `ec3f882` | 2 | `.dockerignore`, `.env.example`, README, two ruff errors |
+| `4f5eeff` | 3 | dead code, unused config, stale files, drop-tables migration |
+| `b5e9898` | 4 | pyright errors, named constants, duplicated helpers merged |
+| `86bd484` | 5 | dial service, API healthcheck, pinned base images, no app at import |
+
+### Results against the baseline
+
+| Check | Baseline | Now |
+|---|---|---|
+| pytest | 194 passed | 260 passed (new: call flow, routes, migration, helpers, dial service) |
+| ruff | 2 errors | 0 |
+| pyright, `src/` | 4 errors | 0 |
+| pyright, whole repo | 49 errors | 44 (all one pattern, `TypedDict` access in tests) |
+| Routes | 16 | 12: the 12 lead-gen and the agent use, unchanged in path, status code and body (pinned by `tests/test_route_contract.py`) |
+| Tool schemas (`end_call`, `skip_turn`, `voicemail_detection`) | | byte-identical to before the cleanup (compared by building both) |
+| Files / lines | | 213 files deleted (202 under `reference/`); about 44,000 lines removed, 2,800 added (mostly tests) |
+
+### What was removed
+
+- **Routes:** `POST/GET /api/v1/calls` (unauthenticated dial), `POST /api/webhooks/elevenlabs/initiation`, `POST /v1/convai/twilio/outbound-call`. Lead-gen calls none of them (it serves its own initiation webhook, and only uses the twilio route for a number whose provider is `twilio`, while ours are `sip_trunk`).
+- **Code:** A1 items 1, 2, 3, 4, 6, 7, 8, 9, 13, 14, 16 plus `get_recent_call_by_phone` (unused after the initiation route went), the two unused models, `scripts/call.py`.
+- **Config and env:** `redis_url`, `sip_phone_number_id`, `environment`, `gender`, `display_name`, `tts.encoding`, `tts.expressive`, `webhook.max_retries`, their YAML keys, env mappings and `.env.example` entries.
+- **Docker:** the no-op `download-files` step and the `posivex_agent` compose service.
+- **Files:** `reference/`, `spikes/`, `CONTEXT_NOTES.md` and six stale docs, the `lk_inspect_venv/` gitignore line.
+- **Database (migration only, not applied):** `agent_config_versions` and `experiments`, via `alembic/versions/b7c41e5a9d20_drop_unused_tables.py` (reversible, tested on a throwaway SQLite file).
+- **Dependencies:** none became unused.
+
+### What was changed (no behaviour change unless listed)
+
+- `google-genai` declared in `pyproject.toml` (and `uv.lock`, two lines).
+- STT, LLM, TTS and VAD mocks moved to `tests/support/mock_providers.py`. The telephony mock stays: `defaults.yaml` defaults `telephony.provider` to `mock`.
+- One `as_utc`, one S3 client builder, one `share_thought_signatures`, one early-call threshold; magic numbers named; debug logs on silent broad excepts.
+- The dial flow moved to `src/api/services/dispatch.py`; the route maps its errors to the same 429 and 500.
+- Compose: API liveness healthcheck and a 30 s `stop_grace_period`. Dockerfile: base images pinned to exact versions that resolve to the same images as the floating tags.
+- `create_app()` is no longer called at import.
+- **Behaviour changes, both on paths no caller uses:** an unsupported `TURN_DETECTOR_MODE` now fails at startup instead of silently using VAD, and a telephony provider's `dial` raises if `call_id` is missing instead of inventing a `conv_` id.
+
+### Left alone, on purpose
+
+| Item | Why |
+|---|---|
+| B5-1 call result lost when the API is down for more than the 30 s shutdown budget; B5-2 the dial dispatches the agent before the SIP call exists | You scoped them out (decision 8): they are behaviour fixes for a separate task |
+| `/metrics`, `/docs`, `/openapi.json` open; readiness returns the database error text | Your decision 1: unchanged |
+| `verify_xi_api_key` accepts any non-empty key when neither `POSIVEX_API_KEY` nor `ELEVENLABS_API_KEY` is set | Public behaviour; needs your decision |
+| `telephony.provider` defaults to `mock` (a server missing `TELEPHONY_PROVIDER` reports success and dials nobody) | `defaults.yaml` still selects it; needs your decision |
+| `Settings` also reads generic env names (`LANGUAGE`, `PERSONA`); the `config_overrides` caller power; phone numbers and names in logs | Config and logging behaviour |
+| `run_agent_session` (a 600-line function) | Step 6, waiting for approval; it is now covered by 27 characterization tests |
+| `ctx.connect()` before `session.start`, `context: RunContext = None`, the private LiveKit/Google attributes, `ctx.log_context_fields` | Step 7, waiting for approval |
+| Pre-commit config (the dependency is declared, there is no config) and the 44 test-side pyright errors | Step 8, tooling, asks first |
+| Outbox row locking (safe with one worker), `COUNT(*)` for active calls, S3 client per audio request, file reads at call start, two `get_sessionmaker` names, no `response_model` on routes | Low value, not requested |
+| `gcc g++ python3-dev libglib2.0-0` in the builder; `postgres:16-alpine` on its major version | Cannot verify without a build; a major pin is deliberate for Postgres. uv is pinned at 0.9.30, the last version published for bookworm |
+| `docs/SIP_NETWORK_DEBUG_GUIDE.md`, `scripts/deploy_agent.py`'s `NOT_SENT` list | Historical guide (marked as such); `NOT_SENT` documents keys that must never be sent to the Cloud agent |
+| A few vulture findings in `src/` | Framework hooks (`on_user_turn_completed`), tool methods, pydantic fields, enum members, and `GreetingDetector.active` and `last_verdict` (used by tests) |
+
+### Server and release actions (yours)
+
+1. `git push origin chore/audit-cleanup`, review, merge.
+2. On the server: `git pull`, then `docker compose up -d --build --remove-orphans posivex_api` (removes the old stopped `posivex_agent` container).
+3. Apply the migration inside the API container: `docker compose exec posivex_api alembic current` (expect `19ddfd7201e0`), then `alembic upgrade head`. If `current` prints nothing, run `alembic stamp 19ddfd7201e0` first. Details are in RUNBOOK section 4.
+4. Check `docker compose ps` shows `posivex_api` as `healthy`, and `GET /health/ready`.
+5. The agent itself is unchanged by this cleanup except for dead code; redeploy it with `scripts/deploy_agent.py` when you want the cleaned image on LiveKit Cloud, then run one test call.
+
+### Not verified
+
+- **No Docker build or compose run** (Docker is not running on this machine): the Dockerfile and compose changes were checked by parsing, by running the healthcheck command against a real local API, and by comparing base image digests, not by building.
+- The state of the production database (whether Alembic created it), nginx rules, and whether anything outside this repo calls the removed routes. Lead-gen's source was searched, ElevenLabs dashboard settings were not.
+- Real-call behaviour. The call flow is covered by fakes; the first test call after a deploy is the real check.
+
+---
+
+The sections below are the original audit, unchanged, as it stood before the cleanup.
 
 ---
 
@@ -343,4 +425,4 @@ Each step is a separate commit (or batch), reviewable and revertable. After each
 
 ---
 
-**STOP. Nothing will be removed or moved until you approve the plan and answer the eight decisions in section G.**
+**Steps 1 to 5 of this plan are done (see "Outcome of the cleanup" at the top). Steps 6 to 8 wait for approval.**
