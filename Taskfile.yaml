@@ -33,3 +33,7 @@ tasks:
       - uv run pyright
       - uv run pytest
 
+  precommit:
+    desc: Run the pre-commit hooks (ruff and pyright) on every file
+    cmds:
+      - uv run pre-commit run --all-files

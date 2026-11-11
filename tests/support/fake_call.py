@@ -162,6 +162,7 @@ class FakeJobContext:
         self.room = SimpleNamespace(name=room_name, metadata=None, remote_participants={}, local_participant=self.local)
         self.proc = SimpleNamespace(userdata={})
         self.api = None
+        self.log_context_fields: dict[str, Any] = {}
         self.callee = callee
         self.never_joins = never_joins
         self.shutdown_reasons: list[str] = []

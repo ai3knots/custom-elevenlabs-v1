@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from typing import Any
 
 from dotenv import load_dotenv
@@ -716,7 +716,7 @@ async def run_agent_session(
             signals.forced_outcome = "no_answer"
             signals.forced_rationale = "The callee did not answer (the call was rejected or dropped while ringing)."
 
-        async def classify(transcript: list[Any], sig: CallSignals) -> Any:
+        async def classify(transcript: Sequence[Mapping[str, Any]], sig: CallSignals) -> Any:
             return await classify_transcript(
                 transcript,
                 sig,

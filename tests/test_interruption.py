@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from livekit.agents import stt
+from livekit.agents.language import LanguageCode
 
 from src.agent.interruption import build_ignore_keys, drop_backchannel_transcripts, is_ignorable
 from src.agent.session_handler import build_turn_handling
 from src.config import ConversationConfig, Settings
+
+
+def _turn_handling(settings: Settings) -> dict[str, Any]:
+    """The turn-handling options as a plain dict (the real type has optional keys)."""
+    return cast(dict[str, Any], build_turn_handling(settings))
+
 
 KEYS = build_ignore_keys(ConversationConfig().interruption_ignore_terms)
 
@@ -24,11 +33,11 @@ def test_is_ignorable_matches_backchannels_only():
 
 def _event(kind: stt.SpeechEventType, text: str) -> stt.SpeechEvent:
     return stt.SpeechEvent(
-        type=kind, alternatives=[stt.SpeechData(language="en", text=text)]
+        type=kind, alternatives=[stt.SpeechData(language=LanguageCode("en"), text=text)]
     )
 
 
-async def _collect(events, speaking: bool):
+async def _collect(events, speaking: bool) -> list[Any]:
     async def gen():
         for ev in events:
             yield ev
@@ -56,13 +65,13 @@ async def test_backchannel_dropped_only_while_agent_speaks():
 
 def test_build_turn_handling_maps_settings():
     settings = Settings()
-    th = build_turn_handling(settings)
+    th = _turn_handling(settings)
     assert th["turn_detection"] == "vad"
     assert th["interruption"] == {"min_words": 1, "discard_audio_if_uninterruptible": False}
     assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 1.5}
 
     settings.turn_detector.mode = "stt-only"
-    assert build_turn_handling(settings)["turn_detection"] == "stt"
+    assert _turn_handling(settings)["turn_detection"] == "stt"
 
 
 def test_build_turn_handling_audio_turn_detector(monkeypatch):
@@ -75,7 +84,7 @@ def test_build_turn_handling_audio_turn_detector(monkeypatch):
     settings = Settings()
     for mode in ("v1", "v1-mini"):
         settings.turn_detector.mode = mode
-        th = build_turn_handling(settings)
+        th = _turn_handling(settings)
         assert isinstance(th["turn_detection"], inference.TurnDetector)
         # Endpointing and interruption settings are unchanged by the detector choice.
         assert th["endpointing"] == {"min_delay": 0.5, "max_delay": 1.5}

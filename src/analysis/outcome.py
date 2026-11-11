@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -58,7 +58,7 @@ class CallSignals:
     notes: list[str] = field(default_factory=list)
 
 
-Classifier = Callable[[list[Mapping[str, Any]], CallSignals], Awaitable[OutcomeResult]]
+Classifier = Callable[[Sequence[Mapping[str, Any]], CallSignals], Awaitable[OutcomeResult]]
 
 
 def format_transcript(transcript: Iterable[Mapping[str, Any]]) -> str:
@@ -100,7 +100,7 @@ def _make_client(api_key: str) -> Any:
 
 
 async def classify_transcript(
-    transcript: list[Mapping[str, Any]],
+    transcript: Sequence[Mapping[str, Any]],
     signals: CallSignals,
     *,
     api_key: str | None,
@@ -168,7 +168,7 @@ async def classify_transcript(
 
 
 async def resolve_call_outcome(
-    transcript: list[Mapping[str, Any]],
+    transcript: Sequence[Mapping[str, Any]],
     signals: CallSignals,
     classifier: Classifier,
 ) -> OutcomeResult:

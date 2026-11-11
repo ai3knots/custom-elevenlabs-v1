@@ -33,6 +33,7 @@ uv sync
 uv run ruff check          # lint
 uv run pyright             # type check
 uv run pytest              # unit tests (no live provider calls)
+uv run pre-commit install  # once: runs ruff and pyright on every commit
 ```
 
 ### 4. Run

@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from src.agent.opener import needs_reply
 from src.agent.session_handler import build_turn_handling
 from src.config import Settings
+
+
+def _turn_handling(settings: Settings) -> dict[str, Any]:
+    """The turn-handling options as a plain dict (the real type has optional keys)."""
+    return cast(dict[str, Any], build_turn_handling(settings))
+
 
 OPENER = "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of Acme Auto?"
 
@@ -36,11 +44,11 @@ def test_our_own_opener_coming_back_as_an_echo_is_not_answered() -> None:
 
 
 def test_the_callees_audio_keeps_reaching_speech_to_text_while_the_opener_plays() -> None:
-    options = build_turn_handling(Settings())
+    options = _turn_handling(Settings())
     assert options["interruption"]["discard_audio_if_uninterruptible"] is False
 
 
 def test_the_end_of_turn_wait_is_capped_at_one_and_a_half_seconds() -> None:
-    endpointing = build_turn_handling(Settings())["endpointing"]
+    endpointing = _turn_handling(Settings())["endpointing"]
     assert endpointing["max_delay"] == 1.5
     assert endpointing["min_delay"] == 0.5

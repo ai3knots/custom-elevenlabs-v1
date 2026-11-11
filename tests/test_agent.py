@@ -1,5 +1,6 @@
 """Unit tests for PersonaAgent: the three tools, the reply gate and the session helpers."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,6 +21,11 @@ def make_agent(**kwargs):
         **kwargs,
     )
     return agent, state, ended
+
+
+def tools(agent: PersonaAgent) -> Any:
+    """The agent as `Any`: pyright types the @function_tool methods as unbound functions."""
+    return agent
 
 
 def make_context():
@@ -49,7 +55,7 @@ async def test_end_call_hangs_up_after_the_closing_line_finishes():
     agent._generation_text = "Perfect, you're all set. Thanks, talk soon."
     context, callbacks, _ = make_context()
 
-    assert await agent.end_call(context, "conversation_complete") is None
+    assert await tools(agent).end_call(context, "conversation_complete") is None
     assert ended == []  # not yet: the closing line is still playing
     assert state.end_reason == "conversation_complete"
     callbacks[0](context.speech_handle)
@@ -63,10 +69,10 @@ async def test_end_call_without_a_spoken_line_is_refused_once_then_allowed():
     context, callbacks, _ = make_context()
 
     with pytest.raises(ToolError, match="closing line"):
-        await agent.end_call(context, "conversation_complete")
+        await tools(agent).end_call(context, "conversation_complete")
     assert callbacks == []
 
-    await agent.end_call(context, "conversation_complete")  # second attempt goes through
+    await tools(agent).end_call(context, "conversation_complete")  # second attempt goes through
     callbacks[0](context.speech_handle)
     assert ended == [("conversation_complete", True)]
 
@@ -76,7 +82,7 @@ async def test_end_call_may_be_silent_for_silence_reason():
     agent, _, ended = make_agent()
     agent._generation_text = ""
     context, callbacks, _ = make_context()
-    await agent.end_call(context, "silence")
+    await tools(agent).end_call(context, "silence")
     callbacks[0](context.speech_handle)
     assert ended == [("silence", True)]
 
@@ -87,7 +93,7 @@ async def test_do_not_call_speaks_the_apology_when_the_model_did_not():
     agent._generation_text = ""
     context, callbacks, session = make_context()
 
-    await agent.end_call(context, "do_not_call")
+    await tools(agent).end_call(context, "do_not_call")
     session.say.assert_called_once_with(DNC_APOLOGY_SPEECH, allow_interruptions=False)
     assert state.do_not_call is True
     callbacks[0](context.speech_handle)
@@ -99,14 +105,14 @@ async def test_do_not_call_does_not_repeat_an_apology_the_model_already_said():
     agent, _, _ = make_agent()
     agent._generation_text = DNC_APOLOGY_SPEECH
     context, _, session = make_context()
-    await agent.end_call(context, "do_not_call")
+    await tools(agent).end_call(context, "do_not_call")
     session.say.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_voicemail_detection_ends_the_call_without_draining():
     agent, state, ended = make_agent()
-    assert await agent.voicemail_detection("voicemail: leave a message") is None
+    assert await tools(agent).voicemail_detection("voicemail: leave a message") is None
     assert state.voicemail_detected is True
     assert ended == [("voicemail_detected", False)]
 
@@ -116,7 +122,7 @@ async def test_human_verdict_blocks_voicemail_tool_on_a_recording_notice():
     state = CallState(greeting_verdict="human", user_turns=1, recent_user_text=["This call is being recorded."])
     agent, _, ended = make_agent(call_state=state)
     with pytest.raises(ToolError, match="live person"):
-        await agent.voicemail_detection("recorded message")
+        await tools(agent).voicemail_detection("recorded message")
     assert ended == [] and state.voicemail_detected is False
 
 
@@ -124,18 +130,18 @@ async def test_human_verdict_blocks_voicemail_tool_on_a_recording_notice():
 async def test_voicemail_guard_allows_real_cues_uncertain_verdicts_and_later_recordings():
     cue = CallState(greeting_verdict="human", user_turns=1, recent_user_text=["Please leave a message after the tone."])
     agent, _, ended = make_agent(call_state=cue)
-    await agent.voicemail_detection("voicemail greeting")
+    await tools(agent).voicemail_detection("voicemail greeting")
     assert ended == [("voicemail_detected", False)]
 
     uncertain = CallState(greeting_verdict="uncertain", user_turns=1, recent_user_text=["This call is being recorded."])
     agent, _, ended = make_agent(call_state=uncertain)
-    await agent.voicemail_detection("voicemail greeting")
+    await tools(agent).voicemail_detection("voicemail greeting")
     assert ended
 
     # Well into the call (a recording after "let me get the owner") the guard no longer applies.
     later = CallState(greeting_verdict="human", user_turns=8, recent_user_text=["please hold"])
     agent, _, ended = make_agent(call_state=later)
-    await agent.voicemail_detection("recorded hold message")
+    await tools(agent).voicemail_detection("recorded hold message")
     assert ended
 
 
@@ -143,7 +149,7 @@ async def test_voicemail_guard_allows_real_cues_uncertain_verdicts_and_later_rec
 async def test_skip_turn_registers_a_hold_without_a_reply():
     agent, state, _ = make_agent(hold_duration_seconds=12.0)
     assert state.is_holding is False
-    assert await agent.skip_turn("checking with owner") is None
+    assert await tools(agent).skip_turn("checking with owner") is None
     assert state.is_holding is True
     state.release_hold()
     assert state.is_holding is False
@@ -203,13 +209,14 @@ def test_prewarmed_vad_is_reused_only_when_settings_match():
 
     settings = Settings()
     sentinel = object()
-    ctx = SimpleNamespace(proc=SimpleNamespace(userdata={"vad": (settings.vad.model_dump(), sentinel)}))
+    ctx: Any = SimpleNamespace(proc=SimpleNamespace(userdata={"vad": (settings.vad.model_dump(), sentinel)}))
     assert _prewarmed_vad(ctx, settings) is sentinel
 
     changed = Settings()
     changed.vad.min_silence_duration = 0.9
     assert _prewarmed_vad(ctx, changed) is None
-    assert _prewarmed_vad(SimpleNamespace(proc=SimpleNamespace(userdata={})), settings) is None
+    empty: Any = SimpleNamespace(proc=SimpleNamespace(userdata={}))
+    assert _prewarmed_vad(empty, settings) is None
 
 
 @pytest.mark.asyncio
@@ -219,7 +226,7 @@ async def test_wait_for_caller_quiet_waits_for_speech_to_end():
 
     from src.agent.session_handler import _wait_for_caller_quiet
 
-    session = SimpleNamespace(user_state="speaking")
+    session: Any = SimpleNamespace(user_state="speaking")
 
     async def stop_speaking() -> None:
         await asyncio.sleep(0.2)
@@ -238,7 +245,7 @@ async def test_wait_for_caller_quiet_gives_up_after_max_wait():
 
     from src.agent.session_handler import _wait_for_caller_quiet
 
-    session = SimpleNamespace(user_state="speaking")
+    session: Any = SimpleNamespace(user_state="speaking")
     assert await _wait_for_caller_quiet(session, quiet_secs=0.1, max_wait=0.2) is False
 
 
@@ -257,13 +264,13 @@ def test_closing_lines_are_recognised_only_at_the_end_of_a_message():
 @pytest.mark.asyncio
 async def test_voicemail_detection_records_whether_it_heard_a_mailbox_or_a_menu():
     agent, state, _ = make_agent()
-    await agent.voicemail_detection("voicemail: leave a message")
+    await tools(agent).voicemail_detection("voicemail: leave a message")
     assert state.machine_kind == "voicemail"
 
     agent, state, _ = make_agent()
-    await agent.voicemail_detection("automated phone menu", kind="menu")
+    await tools(agent).voicemail_detection("automated phone menu", kind="menu")
     assert state.machine_kind == "menu"
 
     agent, state, _ = make_agent()
-    await agent.voicemail_detection("something", kind="nonsense")
+    await tools(agent).voicemail_detection("something", kind="nonsense")
     assert state.machine_kind == "voicemail"  # anything but "menu" is a mailbox
