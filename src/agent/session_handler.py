@@ -22,6 +22,7 @@ from livekit.agents import (
     room_io,
 )
 from livekit.agents.metrics.usage import LLMModelUsage, STTModelUsage, TTSModelUsage
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from src.agent.call_clock import CallClock
@@ -83,13 +84,9 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
 
 def _describe_parse_error(e: Exception) -> str:
     """Which fields were wrong, without their values."""
-    errors = getattr(e, "errors", None)
-    if callable(errors):
-        try:
-            return ", ".join(".".join(str(part) for part in err["loc"]) + f" ({err['type']})" for err in errors())
-        except Exception:
-            return "invalid fields"
-    return "not a JSON object"
+    if isinstance(e, ValidationError):
+        return ", ".join(".".join(str(part) for part in err["loc"]) + f" ({err['type']})" for err in e.errors())
+    return "not valid JSON, or not a JSON object"
 
 
 def _resolve_raw_metadata(ctx: JobContext) -> str | None:
