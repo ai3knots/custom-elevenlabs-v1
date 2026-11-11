@@ -141,3 +141,81 @@ def test_opener_machine_detection_defaults_and_llm_env_overrides(monkeypatch):
     settings = load_settings()
     assert settings.llm.default_model == "gemini-3.5-flash-lite"
     assert settings.llm.fallback_model == "gemini-3.5-flash"
+
+
+# ---- the environment rules ------------------------------------------------------------------------------------
+def _clean_env(monkeypatch) -> None:
+    from src.config import ENV_RULES
+
+    for rule in ENV_RULES:
+        monkeypatch.delenv(rule.env, raising=False)
+    monkeypatch.delenv("VOICE_PHONE_NUMBER_ID", raising=False)
+    monkeypatch.delenv("VOICE_PHONE_NUMBER", raising=False)
+
+
+def _lookup(settings: Settings, path: tuple[str, ...]):
+    value = settings
+    for key in path:
+        value = getattr(value, key)
+    return value
+
+
+def test_every_environment_rule_lands_where_it_says(monkeypatch):
+    from src.config import ENV_RULES
+
+    for rule in ENV_RULES:
+        _clean_env(monkeypatch)
+        sample = "true" if rule.boolean else ("v1-mini" if rule.env == "TURN_DETECTOR_MODE" else "sample-value")
+        if rule.env == "TELEPHONY_PROVIDER":
+            sample = "mock"
+        if rule.env == "LOG_LEVEL":
+            sample = "DEBUG"
+        monkeypatch.setenv(rule.env, sample)
+        found = _lookup(load_settings(), rule.path)
+        assert found == (True if rule.boolean else sample), rule.env
+
+
+def test_an_empty_value_is_ignored_except_for_the_keys_that_may_be_blanked(monkeypatch):
+    from src.config import ENV_RULES
+
+    for rule in ENV_RULES:
+        _clean_env(monkeypatch)
+        before = _lookup(load_settings(), rule.path)
+        monkeypatch.setenv(rule.env, "")
+        after = _lookup(load_settings(), rule.path)
+        assert (after == "") if rule.accept_empty else (after == before), rule.env
+
+
+def test_booleans_accept_true_in_any_case_and_treat_everything_else_as_false(monkeypatch):
+    _clean_env(monkeypatch)
+    monkeypatch.setenv("RECORDING_ENABLED", "TRUE")
+    assert load_settings().recording.enabled is True
+    monkeypatch.setenv("RECORDING_ENABLED", "yes")
+    assert load_settings().recording.enabled is False
+
+
+def test_the_calling_number_variables_replace_the_yaml_list(monkeypatch):
+    _clean_env(monkeypatch)
+    assert [n.phone_number_id for n in load_settings().phone_numbers] == ["phnum_posivex_trunk"]
+    monkeypatch.setenv("VOICE_PHONE_NUMBER", "+14706000407")
+    numbers = load_settings().phone_numbers
+    assert [(n.phone_number_id, n.phone_number) for n in numbers] == [("phnum_posivex_trunk", "+14706000407")]
+    monkeypatch.setenv("VOICE_PHONE_NUMBER_ID", "phnum_other")
+    assert load_settings().phone_numbers[0].phone_number_id == "phnum_other"
+
+
+def test_every_environment_variable_the_loader_reads_is_documented_in_env_example():
+    from pathlib import Path
+
+    from src.config import ENV_RULES
+
+    example = (Path(__file__).resolve().parent.parent / ".env.example").read_text(encoding="utf-8")
+    missing = [r.env for r in ENV_RULES if r.env not in example]
+    missing += [name for name in ("VOICE_PHONE_NUMBER_ID", "VOICE_PHONE_NUMBER") if name not in example]
+    assert missing == []
+
+
+def test_the_config_files_are_found_from_the_package_location():
+    from src.config.loader import CONFIG_DIR
+
+    assert (CONFIG_DIR / "defaults.yaml").exists() and (CONFIG_DIR / "profiles" / "michael.yaml").exists()
