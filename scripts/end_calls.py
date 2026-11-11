@@ -3,8 +3,9 @@
 import asyncio
 import os
 import sys
-from livekit import api
+
 from dotenv import load_dotenv
+from livekit import api
 
 load_dotenv()
 

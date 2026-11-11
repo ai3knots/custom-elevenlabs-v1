@@ -109,7 +109,7 @@ async def register_trunk(args: argparse.Namespace) -> None:
         print(f"   SIP_OUTBOUND_TRUNK_ID = {trunk_id}")
         print("=" * 60)
         print("\nNext step: Add this Trunk ID to your server's .env file:")
-        print(f"TELEPHONY_PROVIDER=livekit_sip")
+        print("TELEPHONY_PROVIDER=livekit_sip")
         print(f"SIP_OUTBOUND_TRUNK_ID={trunk_id}")
         print(f"SIP_PHONE_NUMBER_ID={args.phone}\n")
     except Exception as e:

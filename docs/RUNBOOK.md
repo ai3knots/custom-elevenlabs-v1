@@ -101,7 +101,6 @@ Copy `.env.example` to `.env` and configure credentials:
 | `ENVIRONMENT` | Deployment environment (`development`, `staging`, `production`) | `production` |
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 | `DATABASE_URL` | PostgreSQL AsyncPG connection string | `postgresql+asyncpg://posivex:posivex@localhost:5432/posivex_calls` |
-| `REDIS_URL` | Redis cache and queue connection string | `redis://localhost:6379/0` |
 | `LIVEKIT_URL` | LiveKit Cloud project WebSocket URL | `wss://<project>.livekit.cloud` |
 | `LIVEKIT_API_KEY` | LiveKit Cloud API key (Project Settings -> Keys) | `API...` |
 | `LIVEKIT_API_SECRET` | LiveKit Cloud API secret | `...` |

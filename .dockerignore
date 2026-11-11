@@ -1,3 +1,14 @@
+# Keep build context (and the LiveKit Cloud upload) small and free of secrets and call data.
+#
+# Do NOT add a blanket `*.md`: prompts/knowledge/Knowledge-base.md and prompts/analysis/call_outcome.md are read
+# at runtime and must be in the image.
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Version control, CI, editor and tool caches
 .venv/
 .git/
 .github/
@@ -6,18 +17,27 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.ruff_cache/
+.pyright/
 .coverage
 htmlcov/
-.env
-.env.*
-!.env.example
 *.log
 tmp/
+temp_agent_starter/
+
+# Call recordings and session exports (phone numbers, audio, transcripts)
+recent-calls/
+livekit-recordings/
+
+# Not needed at runtime
 spikes/
 reference/
-temp_agent_starter/
 testing-frontend/
 frontend/
 node_modules/
-
-recent-calls/
+tests/
+docs/
+AUDIT_REPORT.md
+CONTEXT_NOTES.md
+docker-compose*.yml
+scripts/*.ps1
