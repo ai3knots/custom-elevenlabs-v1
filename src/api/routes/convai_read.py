@@ -14,6 +14,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_call_recorder, get_settings, verify_xi_api_key
+from src.api.schemas import (
+    AgentList,
+    AgentOut,
+    ConversationList,
+    ConversationSummary,
+    PhoneNumberOut,
+)
 from src.config import Settings
 from src.db.models import Call, CallStatus, as_utc
 from src.persistence.recorder import CallRecorder
@@ -31,57 +38,55 @@ def _agent_for_call(call: Call, settings: Settings) -> tuple[str, str]:
     return (dialed or entry.agent_id), entry.name
 
 
-@router.get("/agents")
-async def list_agents(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
-    return {
-        "agents": [{"agent_id": a.agent_id, "name": a.name} for a in settings.agents],
-        "has_more": False,
-        "next_cursor": None,
-    }
+@router.get("/agents", response_model=AgentList)
+async def list_agents(settings: Settings = Depends(get_settings)) -> AgentList:
+    return AgentList(
+        agents=[AgentOut(agent_id=a.agent_id, name=a.name) for a in settings.agents], has_more=False, next_cursor=None
+    )
 
 
-@router.get("/phone-numbers")
-async def list_phone_numbers(settings: Settings = Depends(get_settings)) -> list[dict[str, Any]]:
+@router.get("/phone-numbers", response_model=list[PhoneNumberOut])
+async def list_phone_numbers(settings: Settings = Depends(get_settings)) -> list[PhoneNumberOut]:
     return [
-        {
-            "phone_number_id": n.phone_number_id,
-            "phone_number": n.phone_number,
-            "label": n.label,
-            "provider": "sip_trunk",
-            "supports_outbound": True,
-            "supports_inbound": False,
-        }
+        PhoneNumberOut(
+            phone_number_id=n.phone_number_id,
+            phone_number=n.phone_number,
+            label=n.label,
+            provider="sip_trunk",
+            supports_outbound=True,
+            supports_inbound=False,
+        )
         for n in settings.phone_numbers
     ]
 
 
-@router.get("/conversations")
+@router.get("/conversations", response_model=ConversationList)
 async def list_conversations(
     agent_id: str | None = None,
     call_start_after_unix: int | None = None,
     page_size: int = Query(100, ge=1, le=500),
     settings: Settings = Depends(get_settings),
     recorder: CallRecorder = Depends(get_call_recorder),
-) -> dict[str, Any]:
+) -> ConversationList:
     since = datetime.fromtimestamp(call_start_after_unix or 0, tz=UTC)
     calls = await recorder.list_calls_since(since, limit=page_size)
-    items: list[dict[str, Any]] = []
+    items: list[ConversationSummary] = []
     for call in calls:
         call_agent_id, call_agent_name = _agent_for_call(call, settings)
         if agent_id and call_agent_id != agent_id:
             continue
         items.append(
-            {
-                "conversation_id": call.id,
-                "agent_id": call_agent_id,
-                "agent_name": call_agent_name,
-                "start_time_unix_secs": int(as_utc(call.started_at).timestamp()),
-                "call_duration_secs": int(call.duration_secs or 0),
-                "status": conversation_status(call.status),
-                "direction": (call.metadata_json or {}).get("direction", "outbound"),
-            }
+            ConversationSummary(
+                conversation_id=call.id,
+                agent_id=call_agent_id,
+                agent_name=call_agent_name,
+                start_time_unix_secs=int(as_utc(call.started_at).timestamp()),
+                call_duration_secs=int(call.duration_secs or 0),
+                status=conversation_status(call.status),
+                direction=(call.metadata_json or {}).get("direction", "outbound"),
+            )
         )
-    return {"conversations": items, "has_more": False, "next_cursor": None}
+    return ConversationList(conversations=items, has_more=False, next_cursor=None)
 
 
 async def _require_call(call_id: str, recorder: CallRecorder) -> Call:

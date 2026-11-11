@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_call_recorder, get_settings, verify_callback_secret
+from src.api.schemas import ResultAck
 from src.config import Settings
 from src.db.models import CallStatus
 from src.persistence.recorder import CallRecorder
@@ -55,18 +56,18 @@ class CallResult(BaseModel):
     finalize: FinalizeInfo = Field(default_factory=FinalizeInfo)
 
 
-@router.post("/calls/{call_id}/result", status_code=status.HTTP_200_OK)
+@router.post("/calls/{call_id}/result", status_code=status.HTTP_200_OK, response_model=ResultAck)
 async def report_call_result(
     call_id: str,
     body: CallResult,
     settings: Settings = Depends(get_settings),
     recorder: CallRecorder = Depends(get_call_recorder),
-) -> dict[str, Any]:
+) -> ResultAck:
     """Store a finished call reported by the agent. Safe to retry: a finalized call is not stored twice."""
     existing = await recorder.get_call(call_id)
     if existing is not None and existing.status in (CallStatus.COMPLETED.value, CallStatus.FAILED.value):
         logger.info("Result for %s already stored; ignoring the repeat.", call_id)
-        return {"ok": True, "duplicate": True}
+        return ResultAck(ok=True, duplicate=True)
 
     info = body.call
     await recorder.ensure_call(
@@ -108,4 +109,4 @@ async def report_call_result(
         agent_id=fin.agent_id,
         agent_name=fin.agent_name,
     )
-    return {"ok": True, "duplicate": False}
+    return ResultAck(ok=True, duplicate=False)

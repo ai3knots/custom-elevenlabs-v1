@@ -20,7 +20,7 @@ def get_settings(request: Request) -> Settings:
     return load_settings()
 
 
-def get_sessionmaker(request: Request) -> async_sessionmaker[AsyncSession]:
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     """Retrieve database sessionmaker from application state."""
     if hasattr(request.app.state, "sessionmaker") and request.app.state.sessionmaker:
         return cast(async_sessionmaker[AsyncSession], request.app.state.sessionmaker)
@@ -28,7 +28,7 @@ def get_sessionmaker(request: Request) -> async_sessionmaker[AsyncSession]:
 
 
 def get_call_recorder(
-    session_factory: async_sessionmaker[AsyncSession] = Depends(get_sessionmaker),
+    session_factory: async_sessionmaker[AsyncSession] = Depends(get_session_factory),
 ) -> CallRecorder:
     """Provide a CallRecorder instance."""
     return CallRecorder(session_factory)

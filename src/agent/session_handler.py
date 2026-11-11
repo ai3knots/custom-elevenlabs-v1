@@ -294,7 +294,7 @@ async def run_agent_session(
         call_request.language,
     )
 
-    resolved_settings = _settings_for_call(settings, call_request)
+    resolved_settings = await asyncio.to_thread(_settings_for_call, settings, call_request)
     # Call time is counted from pickup, as ElevenLabs does, so transcript times and the duration lead-gen shows
     # do not include 5 to 75 s of ringing. The job start only tells how long it rang.
     clock = CallClock()
@@ -429,7 +429,7 @@ async def run_agent_session(
         })
 
     agent = PersonaAgent(
-        instructions=prompt_manager.render_prompt(call_request.dynamic_variables),
+        instructions=await asyncio.to_thread(prompt_manager.render_prompt, call_request.dynamic_variables),
         call_state=call_state,
         on_end_call=lambda reason, drain: end_call(reason, drain=drain),
         call_id=call_id,
@@ -883,7 +883,6 @@ async def default_agent_entrypoint(ctx: JobContext) -> None:
 def create_agent_server(settings: Settings | None = None) -> AgentServer:
     """Factory creating configured AgentServer with session entrypoint."""
     global _configured_settings
-    load_dotenv()
     app_settings = settings or load_settings()
     _configured_settings = app_settings
 

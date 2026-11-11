@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.api.deps import get_sessionmaker
+from src.api.deps import get_session_factory
 
 logger = logging.getLogger("posivex.api.health")
 router = APIRouter(prefix="/health", tags=["Health"])
@@ -30,7 +30,7 @@ async def liveness_probe() -> dict[str, str]:
 
 @router.get("/ready", status_code=status.HTTP_200_OK)
 async def readiness_probe(
-    session_factory: async_sessionmaker[AsyncSession] = Depends(get_sessionmaker),
+    session_factory: async_sessionmaker[AsyncSession] = Depends(get_session_factory),
 ) -> dict[str, Any]:
     """Readiness probe checking database connectivity."""
     try:

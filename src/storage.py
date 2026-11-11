@@ -14,6 +14,7 @@ logger = logging.getLogger("posivex.storage")
 
 CONTENT_TYPES = {"ogg": "audio/ogg", "mp3": "audio/mpeg"}
 CHUNK_BYTES = 64 * 1024
+_CLIENTS: dict[tuple[str, str, str, str, bool], Any] = {}
 PROBE_CONNECT_TIMEOUT_SECS = 5
 PROBE_READ_TIMEOUT_SECS = 10
 
@@ -27,6 +28,10 @@ class RecordingStream:
 
 def _client(cfg: RecordingConfig, *, probe: bool = False) -> Any:
     """The S3 client for recordings. `probe=True` adds short timeouts and no retries, for the start-up check."""
+    key = (cfg.endpoint, cfg.region, cfg.access_key, cfg.secret, cfg.force_path_style)
+    if not probe and key in _CLIENTS:
+        return _CLIENTS[key]
+
     import boto3
     from botocore.config import Config
 
@@ -37,7 +42,7 @@ def _client(cfg: RecordingConfig, *, probe: bool = False) -> Any:
             read_timeout=PROBE_READ_TIMEOUT_SECS,
             retries={"max_attempts": 1},
         )
-    return boto3.client(
+    client = boto3.client(
         "s3",
         region_name=cfg.region or None,
         endpoint_url=cfg.endpoint or None,
@@ -45,6 +50,9 @@ def _client(cfg: RecordingConfig, *, probe: bool = False) -> Any:
         aws_secret_access_key=cfg.secret,
         config=Config(**options),
     )
+    if not probe:
+        _CLIENTS[key] = client  # boto3 clients are thread-safe; the audio route reads from threads
+    return client
 
 
 def verify_bucket_access(cfg: RecordingConfig) -> str | None:

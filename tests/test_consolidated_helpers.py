@@ -39,6 +39,13 @@ def test_s3_probe_client_has_short_timeouts_and_one_retry() -> None:
     assert (normal.connect_timeout, normal.read_timeout) != (5, 10)  # botocore defaults (60 s)
 
 
+def test_the_s3_client_is_built_once_per_credentials_and_the_probe_client_is_never_reused() -> None:
+    assert _client(_cfg()) is _client(_cfg())
+    assert _client(_cfg(access_key="other")) is not _client(_cfg())
+    assert _client(_cfg(), probe=True) is not _client(_cfg(), probe=True)
+    assert _client(_cfg(), probe=True) is not _client(_cfg())
+
+
 # ---- one _utc ---------------------------------------------------------------------------------------------
 def test_as_utc_treats_naive_times_as_utc_and_keeps_aware_ones() -> None:
     naive = datetime(2026, 11, 10, 12, 0, 0)
