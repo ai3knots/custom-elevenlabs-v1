@@ -150,3 +150,50 @@ class MockVAD(vad.VAD):
 
     def stream(self) -> vad.VADStream:
         return MockVADStream(self)
+
+
+class ScriptedLLMStream(llm.LLMStream):
+    """Replays a fixed list of chunks, so a test can make the model speak and call tools."""
+
+    def __init__(
+        self,
+        llm_instance: llm.LLM,
+        *,
+        chat_ctx: llm.ChatContext,
+        tools: list[llm.Tool],
+        conn_options: APIConnectOptions,
+        chunks: list[llm.ChatChunk],
+    ) -> None:
+        super().__init__(llm_instance, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options)
+        self._chunks = chunks
+
+    async def _run(self) -> None:
+        for chunk in self._chunks:
+            self._event_ch.send_nowait(chunk)
+
+
+class ScriptedLLM(llm.LLM):
+    """An LLM whose every reply is the same scripted chunks (text, then optional tool calls)."""
+
+    def __init__(self, text: str = "", tool_calls: list[tuple[str, str]] | None = None) -> None:
+        super().__init__()
+        self.chunks: list[llm.ChatChunk] = []
+        if text:
+            self.chunks.append(llm.ChatChunk(id="scripted", delta=llm.ChoiceDelta(role="assistant", content=text)))
+        for number, (name, arguments) in enumerate(tool_calls or [], start=1):
+            call = llm.FunctionToolCall(name=name, arguments=arguments, call_id=f"call_{number}")
+            self.chunks.append(llm.ChatChunk(id="scripted", delta=llm.ChoiceDelta(role="assistant", tool_calls=[call])))
+
+    def chat(
+        self,
+        *,
+        chat_ctx: llm.ChatContext,
+        tools: list[llm.Tool] | None = None,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
+        parallel_tool_calls: Any = None,
+        tool_choice: Any = None,
+        extra_kwargs: Any = None,
+    ) -> llm.LLMStream:
+        return ScriptedLLMStream(
+            self, chat_ctx=chat_ctx, tools=tools or [], conn_options=conn_options, chunks=self.chunks
+        )

@@ -189,6 +189,7 @@ async def test_answered_call_speaks_the_scripted_opener_once_after_pickup(make_h
     assert session.said == [(FIRST_MESSAGE, {"allow_interruptions": False})]
     assert session.kwargs["user_away_timeout"] == 15.0
     assert session.room_options.delete_room_on_close is True
+    assert harness.ctx.log_context_fields == {"call_id": CALL_ID, "room": f"call_{CALL_ID}"}  # on every log line
     assert session.agent._hold_replies is False  # the model may answer from now on
     assert session.away_resets == 1  # the silence timer restarts when the opener ends
     assert harness.recorder.call["phone"] == PHONE

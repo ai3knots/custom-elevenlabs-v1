@@ -219,7 +219,7 @@ class PersonaAgent(Agent):
 
     # ---- tools ---------------------------------------------------------------------------------
     @function_tool
-    async def end_call(self, reason: str = "conversation_complete", context: RunContext = None) -> None:  # type: ignore[assignment]
+    async def end_call(self, context: RunContext, reason: str = "conversation_complete") -> None:
         """End the call. Use it in the same turn as the final closing line, or right after the Do Not Call apology. Never use it before the closing line has been spoken.
 
         Args:
@@ -233,7 +233,7 @@ class PersonaAgent(Agent):
             logger.warning("end_call('%s') without a spoken line; asking the model to say its closing line.", value)
             raise ToolError("Say your short closing line out loud, then use end_call in that same turn.")
 
-        session = context.session if context is not None else self.active_session
+        session = context.session
         if value == "do_not_call":
             self.call_state.do_not_call = True
             if "call this number again" not in self._generation_text.lower() and session is not None:
@@ -246,19 +246,11 @@ class PersonaAgent(Agent):
         await self._emit_event("end_call", {"reason": value, "call_id": self.call_id})
 
         # Hang up once the closing line (this turn's speech) has finished playing.
-        if context is not None:
-            context.speech_handle.add_done_callback(lambda _h: self._on_end_call(value, True))
-        else:
-            self._on_end_call(value, True)
+        context.speech_handle.add_done_callback(lambda _h: self._on_end_call(value, True))
         return None
 
     @function_tool
-    async def voicemail_detection(
-        self,
-        reason: str = "voicemail",
-        kind: str = "voicemail",
-        context: RunContext = None,  # type: ignore[assignment]
-    ) -> None:
+    async def voicemail_detection(self, reason: str = "voicemail", kind: str = "voicemail") -> None:
         """Call this immediately, without speaking, when the call is answered by a voicemail greeting, answering machine, recorded or carrier message, call screener or automated menu. Pass a reason of three to five words. Never use it for a live person.
 
         Args:

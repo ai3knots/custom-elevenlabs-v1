@@ -285,6 +285,7 @@ async def run_agent_session(
 
     call_id = call_request.call_id or f"call_{ctx.room.name}"
     set_call_id(call_id)
+    ctx.log_context_fields = {"call_id": call_id, "room": ctx.room.name}
 
     logger.info(
         "Starting agent session for call_id=%s, phone=%s, persona=%s, language=%s",

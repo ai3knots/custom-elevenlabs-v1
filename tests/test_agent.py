@@ -49,7 +49,7 @@ async def test_end_call_hangs_up_after_the_closing_line_finishes():
     agent._generation_text = "Perfect, you're all set. Thanks, talk soon."
     context, callbacks, _ = make_context()
 
-    assert await agent.end_call("conversation_complete", context) is None
+    assert await agent.end_call(context, "conversation_complete") is None
     assert ended == []  # not yet: the closing line is still playing
     assert state.end_reason == "conversation_complete"
     callbacks[0](context.speech_handle)
@@ -63,10 +63,10 @@ async def test_end_call_without_a_spoken_line_is_refused_once_then_allowed():
     context, callbacks, _ = make_context()
 
     with pytest.raises(ToolError, match="closing line"):
-        await agent.end_call("conversation_complete", context)
+        await agent.end_call(context, "conversation_complete")
     assert callbacks == []
 
-    await agent.end_call("conversation_complete", context)  # second attempt goes through
+    await agent.end_call(context, "conversation_complete")  # second attempt goes through
     callbacks[0](context.speech_handle)
     assert ended == [("conversation_complete", True)]
 
@@ -76,7 +76,7 @@ async def test_end_call_may_be_silent_for_silence_reason():
     agent, _, ended = make_agent()
     agent._generation_text = ""
     context, callbacks, _ = make_context()
-    await agent.end_call("silence", context)
+    await agent.end_call(context, "silence")
     callbacks[0](context.speech_handle)
     assert ended == [("silence", True)]
 
@@ -87,7 +87,7 @@ async def test_do_not_call_speaks_the_apology_when_the_model_did_not():
     agent._generation_text = ""
     context, callbacks, session = make_context()
 
-    await agent.end_call("do_not_call", context)
+    await agent.end_call(context, "do_not_call")
     session.say.assert_called_once_with(DNC_APOLOGY_SPEECH, allow_interruptions=False)
     assert state.do_not_call is True
     callbacks[0](context.speech_handle)
@@ -99,7 +99,7 @@ async def test_do_not_call_does_not_repeat_an_apology_the_model_already_said():
     agent, _, _ = make_agent()
     agent._generation_text = DNC_APOLOGY_SPEECH
     context, _, session = make_context()
-    await agent.end_call("do_not_call", context)
+    await agent.end_call(context, "do_not_call")
     session.say.assert_not_called()
 
 

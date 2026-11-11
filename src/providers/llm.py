@@ -42,14 +42,7 @@ def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LL
         # Configure thinking parameters based on model family
         # Gemini 3.5+ supports thinking_level ("MINIMAL", "LOW", etc.)
         # Gemini 2.x uses thinking_budget (int)
-        supports_level = True
-        try:
-            from livekit.plugins.google.llm import _supports_thinking_level
-
-            supports_level = _supports_thinking_level(model)
-        except Exception:
-            logger.debug("Could not ask the Google plugin about thinking levels; guessing from the model name.", exc_info=True)
-            supports_level = not uses_thinking_budget(model)
+        supports_level = not uses_thinking_budget(model)
 
         if supports_level:
             thinking_level_upper = config.thinking_level.upper()
