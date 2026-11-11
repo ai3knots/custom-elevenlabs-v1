@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -278,6 +279,24 @@ async def test_remote_recorder_retries_server_errors_but_not_rejections() -> Non
         with pytest.raises(RuntimeError, match="401"):
             await RemoteRecorder("http://api", "s", client=client, attempts=4, backoff_secs=0).finalize_call("c1")
     assert len(rejected) == 1
+
+
+async def test_remote_recorder_stops_retrying_when_its_time_budget_is_used() -> None:
+    """A down API must not keep the agent past its shutdown allowance: the report gives up in time."""
+    calls: list[int] = []
+
+    def down(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(503)
+
+    recorder_kwargs: dict[str, Any] = {"attempts": 100, "backoff_secs": 0.05, "budget_secs": 0.3}
+    async with httpx.AsyncClient(transport=httpx.MockTransport(down)) as client:
+        started = asyncio.get_running_loop().time()
+        with pytest.raises(RuntimeError, match="503"):
+            await RemoteRecorder("http://api", "s", client=client, **recorder_kwargs).finalize_call("c1")
+        elapsed = asyncio.get_running_loop().time() - started
+    assert 2 <= len(calls) < 100
+    assert elapsed < 1.5
 
 
 # ---- recording --------------------------------------------------------------------------------------------

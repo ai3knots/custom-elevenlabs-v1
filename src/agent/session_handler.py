@@ -131,9 +131,14 @@ QUIET_POLL_SECS = 0.05
 # How often the SIP call status is read while the phone rings.
 ANSWER_POLL_SECS = 0.5
 
+# The callee (the SIP participant, or a browser tester) joins the room within seconds of the dial request. If nobody
+# has by then, the call is reported as not answered instead of the job waiting in an empty room.
+PARTICIPANT_JOIN_TIMEOUT_SECS = 60.0
+
 # Shutdown callbacks (transcripts, costs, outcome, the report to the API) must finish before the job is killed;
-# LiveKit's default is 10 seconds.
-SHUTDOWN_PROCESS_TIMEOUT_SECS = 30.0
+# LiveKit's default is 10 seconds. Worst case: the outcome classifier (20 s) plus the report to the API (its 60 s
+# retry budget plus one 10 s request), with margin. Only a down API takes this long.
+SHUTDOWN_PROCESS_TIMEOUT_SECS = 120.0
 
 # Stand-in number used only with ALLOW_DEFAULT_CALL_REQUEST=true (local development).
 DEV_PLACEHOLDER_PHONE = "+14045550000"
@@ -774,7 +779,7 @@ async def run_agent_session(
     # Wait for the callee (SIP participant or browser tester) to join the room
     logger.info("Waiting for callee to join the room...")
     try:
-        callee = await ctx.wait_for_participant()
+        callee = await asyncio.wait_for(ctx.wait_for_participant(), PARTICIPANT_JOIN_TIMEOUT_SECS)
     except Exception as e:
         logger.warning("No callee joined: %s", e)
         signals.forced_outcome, signals.forced_rationale = "no_answer", "No participant joined the room."

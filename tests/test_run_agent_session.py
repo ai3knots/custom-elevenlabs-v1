@@ -110,8 +110,11 @@ def make_harness(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Harness]:
         settings: Settings | None = None,
         no_metadata: bool = False,
         hold_opener: bool = False,
+        never_joins: bool = False,
     ) -> Harness:
-        harness = Harness(ctx=FakeJobContext(None if no_metadata else (metadata or call_metadata()), callee))
+        harness = Harness(
+            ctx=FakeJobContext(None if no_metadata else (metadata or call_metadata()), callee, never_joins=never_joins)
+        )
         if settings is not None:
             harness.settings = settings
         if hold_opener:
@@ -303,6 +306,17 @@ async def test_no_participant_is_reported_as_no_answer(make_harness: Callable[..
     assert report["outcome_rationale"] == "No participant joined the room."
     assert report["termination_reason"] == "no_participant"
     assert harness.session.shutdowns == [False]
+
+
+async def test_a_callee_who_never_joins_is_reported_as_no_answer_instead_of_waiting_for_ever(
+    make_harness: Callable[..., Harness], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_handler, "PARTICIPANT_JOIN_TIMEOUT_SECS", 0.1)
+    harness = make_harness(never_joins=True)
+    await harness.run()
+    report = await harness.finish()
+    assert report["call_outcome"] == "no_answer"
+    assert report["termination_reason"] == "no_participant"
 
 
 # ---- voicemail and phone-menu detection ---------------------------------------------------------------

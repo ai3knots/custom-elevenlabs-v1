@@ -188,3 +188,37 @@ async def test_dialing_without_a_call_id_is_an_error(provider: object) -> None:
     request.call_id = None
     with pytest.raises(ValueError, match="call_id must be set"):
         await provider.dial(request, room_name="room")  # type: ignore[attr-defined]
+
+
+def _lk_provider(sip_error: Exception | None = None, delete_error: Exception | None = None) -> tuple[LiveKitSIPProvider, MagicMock]:
+    lkapi = MagicMock()
+    lkapi.agent_dispatch.create_dispatch = AsyncMock()
+    lkapi.sip.create_sip_participant = AsyncMock(side_effect=sip_error)
+    lkapi.room.delete_room = AsyncMock(side_effect=delete_error)
+    settings = Settings(telephony={"provider": "livekit_sip", "sip_trunk_id": "ST_default_trunk"})  # type: ignore[arg-type]
+    return LiveKitSIPProvider(settings, api_client=lkapi), lkapi
+
+
+@pytest.mark.asyncio
+async def test_a_failed_phone_leg_deletes_the_room_so_the_dispatched_agent_does_not_wait() -> None:
+    provider, lkapi = _lk_provider(sip_error=RuntimeError("trunk rejected"))
+    with pytest.raises(RuntimeError, match="trunk rejected"):
+        await provider.dial(_make_call_request(), room_name="sip_room_9")
+    lkapi.agent_dispatch.create_dispatch.assert_awaited_once()
+    lkapi.room.delete_room.assert_awaited_once()
+    assert lkapi.room.delete_room.call_args[0][0].room == "sip_room_9"
+
+
+@pytest.mark.asyncio
+async def test_the_original_dial_error_survives_a_failed_room_cleanup() -> None:
+    provider, _ = _lk_provider(sip_error=RuntimeError("trunk rejected"), delete_error=RuntimeError("api down"))
+    with pytest.raises(RuntimeError, match="trunk rejected"):
+        await provider.dial(_make_call_request(), room_name="sip_room_9")
+
+
+@pytest.mark.asyncio
+async def test_a_successful_dial_does_not_touch_the_room() -> None:
+    provider, lkapi = _lk_provider()
+    lkapi.sip.create_sip_participant.return_value = MagicMock(participant_id="p1", sip_call_id="s1")
+    await provider.dial(_make_call_request(), room_name="sip_room_9")
+    lkapi.room.delete_room.assert_not_awaited()

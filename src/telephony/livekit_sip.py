@@ -69,25 +69,31 @@ class LiveKitSIPProvider(TelephonyProvider):
             callee_name,
         )
 
-        # 2. Dial SIP participant
-        sip_part = await lkapi.sip.create_sip_participant(
-            api.CreateSIPParticipantRequest(
-                room_name=room_name,
-                sip_trunk_id=trunk_id,
-                sip_call_to=request.phone,
-                participant_identity=f"phone_{request.phone}",
-                participant_name=callee_name,
-                participant_metadata=request.model_dump_json(),
-                participant_attributes={
-                    "call_id": call_id,
-                    "persona": request.persona,
-                    "language": request.language,
-                    "phone": request.phone,
-                },
-                play_ringtone=True,
-                max_call_duration={"seconds": self._settings.conversation.max_duration_seconds},
+        # 2. Dial SIP participant. The agent is already dispatched, and dispatching created the room, so if the phone
+        # leg cannot be created the room is deleted: otherwise the agent waits in it for a callee who never comes,
+        # holding one of the plan's concurrent sessions.
+        try:
+            sip_part = await lkapi.sip.create_sip_participant(
+                api.CreateSIPParticipantRequest(
+                    room_name=room_name,
+                    sip_trunk_id=trunk_id,
+                    sip_call_to=request.phone,
+                    participant_identity=f"phone_{request.phone}",
+                    participant_name=callee_name,
+                    participant_metadata=request.model_dump_json(),
+                    participant_attributes={
+                        "call_id": call_id,
+                        "persona": request.persona,
+                        "language": request.language,
+                        "phone": request.phone,
+                    },
+                    play_ringtone=True,
+                    max_call_duration={"seconds": self._settings.conversation.max_duration_seconds},
+                )
             )
-        )
+        except Exception:
+            await self._abandon_dispatch(lkapi, room_name)
+            raise
 
         return DispatchResult(
             call_id=call_id,
@@ -96,6 +102,14 @@ class LiveKitSIPProvider(TelephonyProvider):
             sip_call_id=sip_part.sip_call_id or f"sip_{uuid.uuid4().hex[:12]}",
             call_sid=f"CA{uuid.uuid4().hex[:16]}",
         )
+
+    async def _abandon_dispatch(self, lkapi: api.LiveKitAPI, room_name: str) -> None:
+        """Best effort: delete the room so the already-dispatched agent job ends. Never raises."""
+        try:
+            await lkapi.room.delete_room(api.DeleteRoomRequest(room=room_name))
+            logger.warning("Phone leg for room %s could not be created; deleted the room so the agent does not wait.", room_name)
+        except Exception:
+            logger.exception("Could not delete room %s after a failed dial; the agent job will end when the room does.", room_name)
 
     async def close(self) -> None:
         if self._lkapi is not None:

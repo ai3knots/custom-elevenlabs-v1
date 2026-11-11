@@ -154,13 +154,16 @@ class FakeLocalParticipant:
 class FakeJobContext:
     """Stand-in for LiveKit's `JobContext`. `shutdown()` runs the registered callbacks, like the real one."""
 
-    def __init__(self, metadata: str | None, callee: Any = None, room_name: str = f"call_{CALL_ID}") -> None:
+    def __init__(
+        self, metadata: str | None, callee: Any = None, room_name: str = f"call_{CALL_ID}", never_joins: bool = False
+    ) -> None:
         self.job = SimpleNamespace(metadata=metadata, room=SimpleNamespace(metadata=None))
         self.local = FakeLocalParticipant()
         self.room = SimpleNamespace(name=room_name, metadata=None, remote_participants={}, local_participant=self.local)
         self.proc = SimpleNamespace(userdata={})
         self.api = None
         self.callee = callee
+        self.never_joins = never_joins
         self.shutdown_reasons: list[str] = []
         self.shutdown_finished = asyncio.Event()
         self._callbacks: list[Callable[[], Any]] = []
@@ -170,6 +173,8 @@ class FakeJobContext:
         return None
 
     async def wait_for_participant(self, **_: Any) -> Any:
+        if self.never_joins:
+            await asyncio.Event().wait()  # the real call waits for ever
         if self.callee is None:
             raise RuntimeError("no participant joined")
         self.room.remote_participants[self.callee.identity] = self.callee

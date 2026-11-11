@@ -17,8 +17,13 @@ import httpx
 logger = logging.getLogger("posivex.persistence.remote")
 
 POST_TIMEOUT_SECS = 10.0
-DEFAULT_ATTEMPTS = 4
+DEFAULT_ATTEMPTS = 8  # an upper bound; the time budget below normally stops the retries first
 DEFAULT_BACKOFF_SECS = 1.0  # doubles after each failed attempt
+MAX_BACKOFF_SECS = 16.0
+# No new attempt starts after this long, so the whole report takes at most this plus one request timeout. It has to
+# fit in the agent's shutdown allowance (session_handler.SHUTDOWN_PROCESS_TIMEOUT_SECS), together with the
+# outcome classifier: past that the job is killed and the finished call is never reported.
+REPORT_BUDGET_SECS = 60.0
 ERROR_EXCERPT_CHARS = 200
 
 
@@ -30,12 +35,14 @@ class RemoteRecorder:
         client: httpx.AsyncClient | None = None,
         attempts: int = DEFAULT_ATTEMPTS,
         backoff_secs: float = DEFAULT_BACKOFF_SECS,
+        budget_secs: float = REPORT_BUDGET_SECS,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._secret = secret
         self._client = client
         self._attempts = attempts
         self._backoff_secs = backoff_secs
+        self._budget_secs = budget_secs
         self._call_info: dict[str, Any] = {}
         self._events: list[dict[str, Any]] = []
         self._transcript: list[dict[str, Any]] = []
@@ -86,7 +93,7 @@ class RemoteRecorder:
         self._recording = dict(info)
 
     async def finalize_call(self, call_id: str, **kwargs: Any) -> None:
-        """Send the whole call to the API. Raises when every attempt fails."""
+        """Send the whole call to the API, retrying within the time budget. Raises when every attempt fails."""
         kwargs.pop("destination_url", None)  # the API knows lead-gen's URL
         kwargs.pop("create_outbox", None)
         body = {
@@ -103,6 +110,7 @@ class RemoteRecorder:
         client = self._client or httpx.AsyncClient(timeout=POST_TIMEOUT_SECS)
         try:
             last_error = "unknown error"
+            started = time.monotonic()
             for attempt in range(1, self._attempts + 1):
                 try:
                     res = await client.post(url, json=body, headers=headers)
@@ -114,8 +122,13 @@ class RemoteRecorder:
                         break  # a rejected request will not succeed on retry
                 except httpx.HTTPError as e:
                     last_error = repr(e)
-                if attempt < self._attempts:
-                    await asyncio.sleep(self._backoff_secs * (2 ** (attempt - 1)))
+                if attempt == self._attempts:
+                    break
+                delay = min(self._backoff_secs * (2 ** (attempt - 1)), MAX_BACKOFF_SECS)
+                if time.monotonic() - started + delay >= self._budget_secs:
+                    logger.error("Giving up reporting call %s after %d attempts: time budget used.", call_id, attempt)
+                    break
+                await asyncio.sleep(delay)
             raise RuntimeError(f"Could not report call {call_id} to the API: {last_error}")
         finally:
             if owns_client:
