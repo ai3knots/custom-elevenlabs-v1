@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1
 
+# Base images are pinned to exact versions so a rebuild cannot change the OS or Python underneath us. Both tags were
+# checked against the floating tags they replace and resolve to the same images (uv sha256:e5b65587..., python
+# sha256:935c3c5b...). uv stopped publishing bookworm images after 0.9.30. To upgrade, change the tag and rebuild.
+
 # Stage 1: Dependency resolution and virtualenv build with Astral uv
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -30,7 +34,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # Stage 2: Minimal runtime image running as non-root
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12.16-slim-bookworm AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

@@ -214,7 +214,7 @@ All `/v1/convai/*` routes need the header `xi-api-key` equal to the voice API ke
 | `GET /v1/convai/conversations` and `/{id}` | lead-gen | List and read conversations in ElevenLabs format |
 | `GET /v1/convai/conversations/{id}/audio` | lead-gen | Stream the recording from S3 (descriptive 404 when there is none yet) |
 | `POST /internal/calls/{id}/result` | Cloud agent | Report a finished call. Needs header `X-Posivex-Callback-Secret`. Safe to repeat |
-| `GET /health`, `/health/live`, `/health/ready` | monitoring | Health and database readiness |
+| `GET /health`, `/health/live`, `/health/ready` | monitoring | Health and database readiness. The compose healthcheck calls `/health/live` every 30 s |
 | `GET /metrics` | monitoring | Prometheus metrics |
 | `GET /docs` | people | OpenAPI page (currently public on the hostname) |
 
@@ -472,7 +472,7 @@ Defaults live in `config/defaults.yaml` (and `src/config.py`); environment varia
 | Path | Purpose |
 |---|---|
 | `src/main.py` | Entry points: `agent`, `api`, `outbox`, `dev`; startup checks |
-| `src/api/` | FastAPI app, dependencies (auth) and routes (`calls`, `convai_emulation`, `convai_read`, `internal`, `health`) |
+| `src/api/` | FastAPI app factory (`create_app`, nothing is built at import), dependencies (auth), routes (`convai_emulation`, `convai_read`, `internal`, `health`) and `services/dispatch.py` (the dial flow behind the dial route) |
 | `src/agent/session_handler.py` | The per-call flow: pickup, opener, silence, hold, shutdown and reporting |
 | `src/agent/persona_agent.py` | The agent class, its three tools and the call state |
 | `src/agent/greeting_detector.py` | The voicemail and phone-menu check |

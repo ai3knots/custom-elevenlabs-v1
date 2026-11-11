@@ -28,7 +28,10 @@ def create_app(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     telephony_provider: TelephonyProvider | None = None,
 ) -> FastAPI:
-    """Create and configure the FastAPI application."""
+    """Create and configure the FastAPI application.
+
+    Nothing is created at import time. An ASGI runner can use it as a factory: `uvicorn src.api.app:create_app --factory`.
+    """
     app_settings = settings or load_settings()
 
     @asynccontextmanager
@@ -90,7 +93,3 @@ def create_app(
         return Response(content=content, media_type=content_type)
 
     return app
-
-
-# Default app instance for ASGI runners (e.g. uvicorn src.api.app:app)
-app = create_app()

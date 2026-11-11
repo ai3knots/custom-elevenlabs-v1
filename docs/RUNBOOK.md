@@ -202,6 +202,7 @@ If `alembic current` prints nothing, the database was not created by Alembic (th
   - Verifies database connectivity (`SELECT 1`).
   - Returns `{"status": "ready", "database": "connected"}` (HTTP 200).
   - Returns HTTP 503 if database connection fails.
+- **Docker:** `docker-compose.yml` runs a liveness healthcheck on `posivex_api` (`/health/live` every 30 s), so `docker compose ps` shows `healthy` or `unhealthy`. Docker does not restart on `unhealthy`; the restart policy handles crashes. The API gets 30 s to stop (`stop_grace_period`) so the outbox worker can finish the webhook it is delivering.
 
 ### 5.2 Prometheus Metrics Exposition
 - **Metrics Scrape URL:** `GET http://localhost:8000/metrics`
@@ -253,7 +254,7 @@ ElevenLabs-compatible API instead of `https://api.elevenlabs.io` (this needs the
 
 | Lead-gen calls | Handled by |
 |---|---|
-| `POST /v1/convai/sip-trunk/outbound-call` | `convai_emulation.py`: creates the call row, picks the persona from `agent_id`, dials through LiveKit |
+| `POST /v1/convai/sip-trunk/outbound-call` | `convai_emulation.py` calling `services/dispatch.py`: creates the call row, picks the persona from `agent_id`, dials through LiveKit |
 | `GET /v1/convai/agents`, `GET /v1/convai/phone-numbers` | `convai_read.py`: the agents and numbers from `config/defaults.yaml` (`agents:`, `phone_numbers:`) |
 | `GET /v1/convai/conversations`, `/{id}` | `convai_read.py`: the same conversation shape ElevenLabs returns (transcript, tool calls, metadata, analysis) |
 | `GET /v1/convai/conversations/{id}/audio` | `convai_read.py`: streams the recording from the bucket (404 until a recording exists) |

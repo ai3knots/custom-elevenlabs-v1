@@ -41,6 +41,20 @@ services:
     environment:
       - LIVEKIT_AGENT_NAME=posivex-agent
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-posivex}:${POSTGRES_PASSWORD:-posivex_secure_pass}@postgres:5432/${POSTGRES_DB:-posivex_calls}
+    # Longer than Docker's 10 s default: on stop the outbox worker finishes the webhook it is delivering (up to 10 s).
+    stop_grace_period: 30s
+    # Liveness only (the process answers). It lives here, not in the Dockerfile, because the same image runs the
+    # agent on LiveKit Cloud, which has no HTTP port. /health/ready also checks the database if you want that instead.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
