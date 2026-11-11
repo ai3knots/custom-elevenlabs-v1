@@ -205,6 +205,7 @@ class FakeRecorder:
         self.usage: list[dict[str, Any]] = []
         self.recording: dict[str, Any] | None = None
         self.finalized: dict[str, Any] | None = None
+        self.finalize_count = 0
 
     async def ensure_call(self, **kwargs: Any) -> None:
         self.call = kwargs
@@ -224,6 +225,7 @@ class FakeRecorder:
         self.recording = info
 
     async def finalize_call(self, call_id: str, **kwargs: Any) -> None:
+        self.finalize_count += 1
         self.finalized = {"call_id": call_id, **kwargs}
 
     def event_names(self) -> list[str]:

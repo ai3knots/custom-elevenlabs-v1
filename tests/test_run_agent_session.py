@@ -320,6 +320,52 @@ async def test_a_callee_who_never_joins_is_reported_as_no_answer_instead_of_wait
     assert report["termination_reason"] == "no_participant"
 
 
+async def test_a_phone_call_that_ends_while_still_ringing_is_labelled_no_answer(
+    make_harness: Callable[..., Harness],
+) -> None:
+    """The session closes before the callee ever picked up (declined, busy, network refusal)."""
+    harness = make_harness(callee=sip_callee("ringing"))
+    task = harness.start()
+    await wait_until(lambda: bool(harness.sessions) and bool(harness.session.participants))  # waiting for pickup
+    harness.session.shutdown(drain=False)
+    report = await harness.finish()
+    task.cancel()
+    assert report["call_outcome"] == "no_answer"
+    assert report["outcome_rationale"] == "The callee did not answer (the call was rejected or dropped while ringing)."
+    assert report["duration_secs"] == 0.0
+    assert "timing_pickup" not in harness.recorder.event_names()
+
+
+async def test_ring_time_is_measured_to_the_pickup_and_talk_time_starts_there(
+    make_harness: Callable[..., Harness],
+) -> None:
+    callee = sip_callee("ringing")
+    harness = make_harness(callee=callee)
+    task = harness.start()
+    await wait_until(lambda: bool(harness.sessions) and bool(harness.session.participants))
+    await asyncio.sleep(0.3)
+    callee.attributes["sip.callStatus"] = "active"
+    await asyncio.wait_for(task, 5.0)
+    await settle()
+    report = await harness.finish()
+    pickup = harness.recorder.payload("timing_pickup")
+    assert pickup["ring_secs"] >= 0.3 and pickup["sip"] is True
+    assert pickup["since_pickup_secs"] == 0.0  # the call clock starts at the pickup, not at the dial
+    end = harness.recorder.payload("timing_call_end")
+    assert end["ring_secs"] == pickup["ring_secs"] and end["talk_secs"] < end["ring_secs"]
+    assert report["duration_secs"] < pickup["ring_secs"]
+
+
+async def test_the_call_is_finalized_once_even_if_the_shutdown_callback_runs_again(
+    make_harness: Callable[..., Harness],
+) -> None:
+    harness = make_harness(callee=browser_callee())
+    await harness.run()
+    await harness.finish()
+    await harness.ctx._callbacks[0]()  # a second shutdown notification
+    assert harness.recorder.finalize_count == 1
+
+
 # ---- voicemail and phone-menu detection ---------------------------------------------------------------
 @pytest.mark.parametrize(
     ("category", "outcome", "reason"),
@@ -431,6 +477,16 @@ async def test_overlap_reply_waits_for_the_greeting_check_to_say_human(make_harn
     assert harness.session.replies == [
         {"user_input": "Yes this is the owner of the shop", "instructions": OVERLAP_REPLY_INSTRUCTIONS}
     ]
+
+
+async def test_no_reply_is_made_to_words_over_the_opener_while_the_greeting_check_is_unsure(
+    make_harness: Callable[..., Harness],
+) -> None:
+    """A voicemail greeting must never get a reply: without a confident 'human', words over the opener stay unanswered."""
+    FakeClassifier.verdict = GreetingVerdict("unclear", 0.3, 0.2)
+    harness = make_harness(callee=browser_callee(), settings=make_settings(detector=True), hold_opener=True)
+    await _run_with_speech_over_opener(harness, ["Yes this is the owner of the shop"])
+    assert harness.session.replies == []
 
 
 # ---- silence ------------------------------------------------------------------------------------------
