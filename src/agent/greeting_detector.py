@@ -26,6 +26,7 @@ MENU = "menu"
 UNCLEAR = "unclear"
 CATEGORIES = (HUMAN, VOICEMAIL, MENU, UNCLEAR)
 MACHINE_CATEGORIES = (VOICEMAIL, MENU)
+LOGGED_OUTPUT_CHARS = 200  # how much of an unusable model reply is logged
 
 GREETING_SYSTEM = """You listen to the first seconds of an outbound phone call that a business has just answered. You get the transcript of what the other party has said so far. It may be cut off mid-sentence and may contain transcription errors. Decide who or what answered.
 
@@ -70,15 +71,17 @@ OnMachine = Callable[[GreetingVerdict, str], None]
 
 
 def _make_client(api_key: str) -> Any:
-    from google import genai
+    from google.genai import Client
 
-    return genai.Client(api_key=api_key)
+    return Client(api_key=api_key)
 
 
 def _thinking_config(model: str) -> Any:
     from google.genai import types
 
-    if "2.5" in model or "2.0" in model:
+    from src.providers.llm import uses_thinking_budget
+
+    if uses_thinking_budget(model):
         return types.ThinkingConfig(thinking_budget=0)
     return types.ThinkingConfig(thinking_level="MINIMAL")  # type: ignore[arg-type]
 
@@ -135,6 +138,7 @@ def parse_verdict(text: str | None, *, seconds: float = 0.0) -> GreetingVerdict:
         category = str(data.get("category", "")).strip().lower()
         confidence = float(data.get("confidence", 0.0))
     except (ValueError, TypeError, AttributeError):
+        logger.debug("Unusable greeting-check output, treating it as unclear: %r", (text or "")[:LOGGED_OUTPUT_CHARS])
         return GreetingVerdict(UNCLEAR, 0.0, seconds)
     if category not in CATEGORIES:
         return GreetingVerdict(UNCLEAR, 0.0, seconds)

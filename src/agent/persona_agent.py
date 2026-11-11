@@ -45,14 +45,21 @@ CLOSING_CUES = re.compile(
 
 def is_closing_line(text: str) -> bool:
     """True when an agent message ends with a goodbye (only the tail is checked)."""
-    return bool(CLOSING_CUES.search((text or "").strip()[-90:]))
+    return bool(CLOSING_CUES.search((text or "").strip()[-CLOSING_TAIL_CHARS:]))
 
 
 # end_call reasons that are allowed without a spoken line in the same turn.
 SILENT_END_REASONS = frozenset({"voicemail", "silence", "no_answer", "do_not_call"})
 
-# The voicemail guard only applies while the call is young (a recording notice at the very start).
-MACHINE_GUARD_MAX_USER_TURNS = 3
+# A call is "young" until the callee has taken this many turns. While it is young the greeting check keeps
+# running and the voicemail tool is guarded (a recording notice at the very start is not a machine).
+EARLY_CALL_USER_TURNS = 3
+
+# is_closing_line() looks only at the last characters of an agent message.
+CLOSING_TAIL_CHARS = 90
+
+# How many of the callee's latest turns are kept for the machine-cue check.
+RECENT_USER_TURNS_KEPT = 3
 
 EventHandler = Callable[[str, dict[str, Any]], None] | Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]
 EndCallHandler = Callable[[str, bool], None]
@@ -180,7 +187,7 @@ class PersonaAgent(Agent):
         text = (new_message.text_content or "").strip()
         if text:
             self.call_state.user_turns += 1
-            self.call_state.recent_user_text = (self.call_state.recent_user_text + [text])[-3:]
+            self.call_state.recent_user_text = (self.call_state.recent_user_text + [text])[-RECENT_USER_TURNS_KEPT:]
         if not self._hold_replies:
             return
         if text:
@@ -206,7 +213,7 @@ class PersonaAgent(Agent):
         or menu, the model may not hang up early in the call (a recording notice alone is not a machine).
         """
         state = self.call_state
-        if state.greeting_verdict != "human" or state.user_turns > MACHINE_GUARD_MAX_USER_TURNS:
+        if state.greeting_verdict != "human" or state.user_turns > EARLY_CALL_USER_TURNS:
             return False
         return not MACHINE_CUES.search(" ".join(state.recent_user_text))
 
@@ -246,8 +253,11 @@ class PersonaAgent(Agent):
         return None
 
     @function_tool
-    async def voicemail_detection(  # type: ignore[assignment]
-        self, reason: str = "voicemail", kind: str = "voicemail", context: RunContext = None
+    async def voicemail_detection(
+        self,
+        reason: str = "voicemail",
+        kind: str = "voicemail",
+        context: RunContext = None,  # type: ignore[assignment]
     ) -> None:
         """Call this immediately, without speaking, when the call is answered by a voicemail greeting, answering machine, recorded or carrier message, call screener or automated menu. Pass a reason of three to five words. Never use it for a live person.
 

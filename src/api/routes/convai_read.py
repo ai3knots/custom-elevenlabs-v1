@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_call_recorder, get_settings, verify_xi_api_key
 from src.config import Settings
-from src.db.models import Call, CallStatus
+from src.db.models import Call, CallStatus, as_utc
 from src.persistence.recorder import CallRecorder
 from src.storage import open_recording
 from src.webhook.payload import build_conversation_data, conversation_status
@@ -75,7 +75,7 @@ async def list_conversations(
                 "conversation_id": call.id,
                 "agent_id": call_agent_id,
                 "agent_name": call_agent_name,
-                "start_time_unix_secs": int(call.started_at.replace(tzinfo=call.started_at.tzinfo or UTC).timestamp()),
+                "start_time_unix_secs": int(as_utc(call.started_at).timestamp()),
                 "call_duration_secs": int(call.duration_secs or 0),
                 "status": conversation_status(call.status),
                 "direction": (call.metadata_json or {}).get("direction", "outbound"),
@@ -111,13 +111,6 @@ async def get_conversation(
 RECORDING_PROCESSING_SECS = 300
 
 
-def _utc(moment: datetime | None) -> datetime | None:
-    """SQLite hands back naive datetimes; they are UTC."""
-    if moment is None:
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
-
-
 def _no_recording_reason(call: Call, key: str | None, settings: Settings) -> str | None:
     """Why there is nothing to play for this call, in words that point at the fix; None when there is a file."""
     cfg = settings.recording
@@ -142,7 +135,7 @@ async def get_conversation_audio(
     recording = (call.metadata_json or {}).get("recording") or {}
     key = recording.get("key")
     reason = _no_recording_reason(call, key, settings)
-    if reason:
+    if reason or not key:  # no reason to refuse means there is a key; the check narrows its type
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=reason)
     try:
         stream = await open_recording(settings.recording, key, recording.get("file_type", "ogg"))
@@ -150,7 +143,7 @@ async def get_conversation_audio(
         logger.exception("Could not open recording %s: %s", key, e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Recording storage unavailable") from e
     if stream is None:
-        ended = _utc(call.ended_at)
+        ended = as_utc(call.ended_at) if call.ended_at else None
         just_ended = ended is not None and (datetime.now(UTC) - ended).total_seconds() < RECORDING_PROCESSING_SECS
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

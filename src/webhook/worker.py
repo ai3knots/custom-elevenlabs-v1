@@ -18,12 +18,18 @@ from src.webhook.signer import sign_payload
 
 logger = logging.getLogger("posivex.webhook.worker")
 
+DELIVERY_TIMEOUT_SECS = 10.0  # one POST to lead-gen
+ERROR_EXCERPT_CHARS = 200  # how much of a failed response or exception is stored
+INITIAL_BACKOFF_SECS = 2.0
+MAX_BACKOFF_SECS = 3600.0
+BATCH_SIZE = 50
+
 
 def calculate_backoff_seconds(
     attempt: int,
     base: float = 2.0,
-    initial_delay_secs: float = 2.0,
-    max_delay_secs: float = 3600.0,
+    initial_delay_secs: float = INITIAL_BACKOFF_SECS,
+    max_delay_secs: float = MAX_BACKOFF_SECS,
 ) -> float:
     """Calculate exponential backoff interval in seconds."""
     delay = initial_delay_secs * (base ** max(0, attempt - 1))
@@ -72,7 +78,7 @@ class WebhookOutboxWorker:
         should_close_client = False
         client = self._client
         if client is None:
-            client = httpx.AsyncClient(timeout=10.0)
+            client = httpx.AsyncClient(timeout=DELIVERY_TIMEOUT_SECS)
             should_close_client = True
 
         success = False
@@ -83,9 +89,9 @@ class WebhookOutboxWorker:
             if 200 <= response.status_code < 300:
                 success = True
             else:
-                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                error_msg = f"HTTP {response.status_code}: {response.text[:ERROR_EXCERPT_CHARS]}"
         except Exception as exc:
-            error_msg = f"{type(exc).__name__}: {str(exc)[:200]}"
+            error_msg = f"{type(exc).__name__}: {str(exc)[:ERROR_EXCERPT_CHARS]}"
         finally:
             if should_close_client:
                 await client.aclose()
@@ -137,7 +143,7 @@ class WebhookOutboxWorker:
             await session.commit()
             return success
 
-    async def process_pending(self, limit: int = 50) -> int:
+    async def process_pending(self, limit: int = BATCH_SIZE) -> int:
         """Fetch and process a batch of pending webhook entries."""
         now = datetime.now(UTC)
         async with self.session_factory() as session:

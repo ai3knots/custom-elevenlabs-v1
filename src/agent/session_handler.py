@@ -32,7 +32,7 @@ from src.agent.greeting_detector import (
     machine_outcome,
 )
 from src.agent.opener import OVERLAP_REPLY_INSTRUCTIONS, needs_reply
-from src.agent.persona_agent import CallState, PersonaAgent, is_closing_line
+from src.agent.persona_agent import EARLY_CALL_USER_TURNS, CallState, PersonaAgent, is_closing_line
 from src.agent.silence import nudge_and_rearm, watch_for_silence
 from src.analysis import CallSignals, classify_transcript, resolve_call_outcome
 from src.config import CallRequest, Settings, load_settings
@@ -65,7 +65,7 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
     if not room_metadata:
         if allow_default:
             logger.warning("Empty metadata; using default CallRequest (ALLOW_DEFAULT_CALL_REQUEST).")
-            return CallRequest(phone="+14045550000")
+            return CallRequest(phone=DEV_PLACEHOLDER_PHONE)
         raise ValueError("No call metadata supplied with the dispatch or room.")
 
     try:
@@ -74,9 +74,9 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
             raise ValueError("metadata JSON must be an object")
         return CallRequest.model_validate(data)
     except Exception as e:
-        logger.error("Failed to parse call metadata: %s (raw: %s)", e, room_metadata[:500])
+        logger.error("Failed to parse call metadata: %s (raw: %s)", e, room_metadata[:LOGGED_METADATA_CHARS])
         if allow_default:
-            return CallRequest(phone="+14045550000")
+            return CallRequest(phone=DEV_PLACEHOLDER_PHONE)
         raise ValueError(f"Invalid call metadata: {e}") from e
 
 
@@ -124,12 +124,31 @@ def _usage_into_costs(session: AgentSession, costs: CostAccumulator, duration_se
 # Grace period after an agent goodbye before the call is ended if the model did not call end_call.
 CLOSING_GRACE_SECS = 2.5
 
+# The opener waits until the callee has been quiet this long, checking this often.
+OPENER_QUIET_SECS = 0.25
+QUIET_POLL_SECS = 0.05
+
+# How often the SIP call status is read while the phone rings.
+ANSWER_POLL_SECS = 0.5
+
+# Shutdown callbacks (transcripts, costs, outcome, the report to the API) must finish before the job is killed;
+# LiveKit's default is 10 seconds.
+SHUTDOWN_PROCESS_TIMEOUT_SECS = 30.0
+
+# Stand-in number used only with ALLOW_DEFAULT_CALL_REQUEST=true (local development).
+DEV_PLACEHOLDER_PHONE = "+14045550000"
+
+# How much of the raw dispatch metadata is logged on a parse error, and of the callee's words kept in a rationale.
+LOGGED_METADATA_CHARS = 500
+RATIONALE_TEXT_CHARS = 200
+
 
 def _prewarmed_vad(ctx: JobContext, settings: Settings) -> Any | None:
     """VAD loaded during process warm-up, if its settings match this call's."""
     try:
         cached = ctx.proc.userdata.get("vad")
     except Exception:
+        logger.debug("No prewarmed VAD available; it will be loaded for this call.", exc_info=True)
         return None
     if not cached:
         return None
@@ -175,7 +194,7 @@ async def _wait_for_answer(
             return "hangup"
         if is_gone():
             return "disconnected"
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(ANSWER_POLL_SECS)
     return "timeout"
 
 
@@ -194,7 +213,7 @@ async def _wait_for_caller_quiet(
             quiet_since = quiet_since if quiet_since is not None else now
             if now - quiet_since >= quiet_secs:
                 return True
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(QUIET_POLL_SECS)
     return False
 
 
@@ -322,12 +341,6 @@ async def run_agent_session(
         )
 
     llm_primary_base, llm_fallback_base = await asyncio.to_thread(_build_llms)
-
-    # Share a single thought_signatures dictionary across the Gemini LLM instances
-    shared_thought_signatures: dict[str, bytes] = {}
-    for base_llm in (llm_primary_base, llm_fallback_base):
-        if hasattr(base_llm, "_thought_signatures"):
-            object.__setattr__(base_llm, "_thought_signatures", shared_thought_signatures)
 
     llm_primary = create_fallback_llm(llm_primary_base, llm_fallback_base, resolved_settings.llm)
 
@@ -579,7 +592,7 @@ async def run_agent_session(
         outcome, reason = machine_outcome(verdict.category)
         signals.forced_outcome = signals.forced_outcome or outcome
         signals.forced_rationale = signals.forced_rationale or (
-            f"Greeting check: {verdict.category} ({verdict.confidence:.2f}). {text[:200]}"
+            f"Greeting check: {verdict.category} ({verdict.confidence:.2f}). {text[:RATIONALE_TEXT_CHARS]}"
         )
         call_state.greeting_verdict = verdict.category
         call_state.end_reason = call_state.end_reason or "machine_detected"
@@ -633,7 +646,7 @@ async def run_agent_session(
         if opener_state["playing"] and bool(getattr(ev, "is_final", False)):
             overlap_finals.append(text)
         if detector is not None:
-            if call_state.user_turns >= 3:
+            if call_state.user_turns >= EARLY_CALL_USER_TURNS:
                 detector.stop()  # a real conversation is under way
             else:
                 detector.feed(text, bool(getattr(ev, "is_final", False)))
@@ -813,7 +826,7 @@ async def run_agent_session(
     if termination["reason"]:
         return
     quiet_wait = conv_cfg.opener_quiet_wait_seconds
-    quiet = await _wait_for_caller_quiet(session, quiet_secs=0.25, max_wait=quiet_wait) if quiet_wait > 0 else True
+    quiet = await _wait_for_caller_quiet(session, quiet_secs=OPENER_QUIET_SECS, max_wait=quiet_wait) if quiet_wait > 0 else True
     if termination["reason"]:
         return
 
@@ -863,7 +876,7 @@ def create_agent_server(settings: Settings | None = None) -> AgentServer:
 
     # Shutdown callbacks (transcripts, costs, finalize + outbox) must finish before the job is killed;
     # the LiveKit default is 10 seconds.
-    server_kwargs: dict[str, Any] = {"shutdown_process_timeout": 30.0}
+    server_kwargs: dict[str, Any] = {"shutdown_process_timeout": SHUTDOWN_PROCESS_TIMEOUT_SECS}
     if app_settings.livekit_url:
         server_kwargs["ws_url"] = app_settings.livekit_url
         os.environ["LIVEKIT_URL"] = app_settings.livekit_url

@@ -13,6 +13,9 @@ from src.prompts.kb import KnowledgeBaseProvider
 
 logger = logging.getLogger("posivex.prompts.manager")
 
+# The scripted opening line, spoken verbatim after pickup.
+FIRST_MESSAGE_TEMPLATE = "Hi, this is {name} from Clover Posivex. Am I speaking with the owner of {business}?"
+
 
 class PromptManager:
     """Loads the persona's system prompt, substitutes dynamic variables and appends the knowledge base."""
@@ -42,7 +45,7 @@ class PromptManager:
     def get_first_message(self, variables: DynamicVariables) -> str:
         """The scripted opening line (English only)."""
         biz_name = variables.business_name or "the business"
-        return f"Hi, this is {self.display_name} from Clover Posivex. Am I speaking with the owner of {biz_name}?"
+        return FIRST_MESSAGE_TEMPLATE.format(name=self.display_name, business=biz_name)
 
     def render_system_prompt(self, variables: DynamicVariables) -> str:
         """Render the persona's system prompt with the dynamic variables."""

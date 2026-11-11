@@ -6,6 +6,9 @@ import hashlib
 import hmac
 import time
 
+# How far a signature's timestamp may be from now before it is rejected (replay protection).
+SIGNATURE_TOLERANCE_SECS = 1800
+
 
 def sign_payload(
     raw_body: str | bytes,
@@ -30,7 +33,7 @@ def verify_signature(
     raw_body: str | bytes,
     secret: str,
     now_secs: int | None = None,
-    tolerance_secs: int = 1800,
+    tolerance_secs: int = SIGNATURE_TOLERANCE_SECS,
 ) -> bool:
     """Verify an incoming ElevenLabs webhook signature header.
 

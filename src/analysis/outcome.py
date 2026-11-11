@@ -94,9 +94,9 @@ def _load_rules() -> str:
 
 
 def _make_client(api_key: str) -> Any:
-    from google import genai
+    from google.genai import Client
 
-    return genai.Client(api_key=api_key)
+    return Client(api_key=api_key)
 
 
 async def classify_transcript(

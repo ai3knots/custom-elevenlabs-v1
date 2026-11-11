@@ -14,6 +14,8 @@ logger = logging.getLogger("posivex.storage")
 
 CONTENT_TYPES = {"ogg": "audio/ogg", "mp3": "audio/mpeg"}
 CHUNK_BYTES = 64 * 1024
+PROBE_CONNECT_TIMEOUT_SECS = 5
+PROBE_READ_TIMEOUT_SECS = 10
 
 
 @dataclass
@@ -23,17 +25,25 @@ class RecordingStream:
     chunks: AsyncIterator[bytes]
 
 
-def _client(cfg: RecordingConfig) -> Any:
+def _client(cfg: RecordingConfig, *, probe: bool = False) -> Any:
+    """The S3 client for recordings. `probe=True` adds short timeouts and no retries, for the start-up check."""
     import boto3
     from botocore.config import Config
 
+    options: dict[str, Any] = {"s3": {"addressing_style": "path" if cfg.force_path_style else "auto"}}
+    if probe:
+        options.update(
+            connect_timeout=PROBE_CONNECT_TIMEOUT_SECS,
+            read_timeout=PROBE_READ_TIMEOUT_SECS,
+            retries={"max_attempts": 1},
+        )
     return boto3.client(
         "s3",
         region_name=cfg.region or None,
         endpoint_url=cfg.endpoint or None,
         aws_access_key_id=cfg.access_key,
         aws_secret_access_key=cfg.secret,
-        config=Config(s3={"addressing_style": "path" if cfg.force_path_style else "auto"}),
+        config=Config(**options),
     )
 
 
@@ -42,23 +52,9 @@ def verify_bucket_access(cfg: RecordingConfig) -> str | None:
 
     Blocking, with short timeouts; meant for service start-up, not for a request path.
     """
-    import boto3
-    from botocore.config import Config
     from botocore.exceptions import BotoCoreError, ClientError
 
-    client = boto3.client(
-        "s3",
-        region_name=cfg.region or None,
-        endpoint_url=cfg.endpoint or None,
-        aws_access_key_id=cfg.access_key,
-        aws_secret_access_key=cfg.secret,
-        config=Config(
-            s3={"addressing_style": "path" if cfg.force_path_style else "auto"},
-            connect_timeout=5,
-            read_timeout=10,
-            retries={"max_attempts": 1},
-        ),
-    )
+    client = _client(cfg, probe=True)
     key = f"{cfg.prefix.strip('/')}/.startup-check" if cfg.prefix.strip("/") else ".startup-check"
     try:
         client.put_object(Bucket=cfg.bucket, Key=key, Body=b"ok")

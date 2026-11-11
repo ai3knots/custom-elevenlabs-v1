@@ -10,10 +10,10 @@ returns never differ.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
-from src.db.models import Call, CallEvent, CallStatus, Transcript
+from src.db.models import Call, CallEvent, CallStatus, Transcript, as_utc
 
 # Agent events that lead-gen sees as tool calls (name as the ElevenLabs agent would call it).
 TOOL_EVENTS = {
@@ -45,15 +45,10 @@ def conversation_status(call_status: str) -> str:
     return "in-progress"
 
 
-def _utc(moment: datetime) -> datetime:
-    """SQLite drops time zones; every stored time is UTC, so a naive value is treated as UTC."""
-    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
-
-
 def _secs_since(start: datetime | None, moment: datetime | None) -> float:
     if start is None or moment is None:
         return 0.0
-    return max(0.0, round((_utc(moment) - _utc(start)).total_seconds(), 2))
+    return max(0.0, round((as_utc(moment) - as_utc(start)).total_seconds(), 2))
 
 
 def _tool_turns(call: Call, events: Sequence[CallEvent]) -> list[dict[str, Any]]:
@@ -120,7 +115,7 @@ def build_conversation_data(
 
     finished = call.status in (CallStatus.COMPLETED.value, CallStatus.FAILED.value)
     metadata: dict[str, Any] = {
-        "start_time_unix_secs": int(_utc(call.started_at).timestamp()) if call.started_at else 0,
+        "start_time_unix_secs": int(as_utc(call.started_at).timestamp()) if call.started_at else 0,
         "call_duration_secs": int(call.duration_secs or 0),
         "cost": round(call.total_cost or 0.0, 4),
         "termination_reason": call.termination_reason or "",

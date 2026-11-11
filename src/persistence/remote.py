@@ -17,6 +17,9 @@ import httpx
 logger = logging.getLogger("posivex.persistence.remote")
 
 POST_TIMEOUT_SECS = 10.0
+DEFAULT_ATTEMPTS = 4
+DEFAULT_BACKOFF_SECS = 1.0  # doubles after each failed attempt
+ERROR_EXCERPT_CHARS = 200
 
 
 class RemoteRecorder:
@@ -25,8 +28,8 @@ class RemoteRecorder:
         base_url: str,
         secret: str,
         client: httpx.AsyncClient | None = None,
-        attempts: int = 4,
-        backoff_secs: float = 1.0,
+        attempts: int = DEFAULT_ATTEMPTS,
+        backoff_secs: float = DEFAULT_BACKOFF_SECS,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._secret = secret
@@ -106,7 +109,7 @@ class RemoteRecorder:
                     if res.status_code < 300:
                         logger.info("Reported call %s to the API (attempt %d).", call_id, attempt)
                         return
-                    last_error = f"HTTP {res.status_code}: {res.text[:200]}"
+                    last_error = f"HTTP {res.status_code}: {res.text[:ERROR_EXCERPT_CHARS]}"
                     if res.status_code < 500 and res.status_code != 429:
                         break  # a rejected request will not succeed on retry
                 except httpx.HTTPError as e:

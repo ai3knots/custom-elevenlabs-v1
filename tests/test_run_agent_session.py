@@ -357,6 +357,18 @@ async def test_machine_heard_during_the_opener_cuts_it_off_before_it_finishes(
     assert "timing_opener_finished" not in harness.recorder.event_names()
 
 
+async def test_greeting_check_stops_once_the_conversation_is_under_way(make_harness: Callable[..., Harness]) -> None:
+    """After three caller turns the call counts as a real conversation and the check stops asking."""
+    FakeClassifier.verdict = GreetingVerdict("voicemail", 0.99, 0.2)
+    harness = make_harness(callee=browser_callee(), settings=make_settings(detector=True))
+    await harness.run()
+    harness.session.agent.call_state.user_turns = 3
+    harness.session.hear("You have reached the mailbox of Apex Pizza please leave a message after the tone")
+    await settle()
+    await asyncio.sleep(0.05)
+    assert FakeClassifier.asked == [] and harness.session.shutdowns == []
+
+
 async def test_greeting_check_is_off_without_a_gemini_key(make_harness: Callable[..., Harness]) -> None:
     harness = make_harness(callee=browser_callee(), settings=make_settings(detector=False))
     await harness.run()

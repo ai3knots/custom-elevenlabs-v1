@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -10,6 +11,18 @@ from livekit.agents import llm
 from livekit.plugins import google
 
 from src.config import LLMConfig
+
+logger = logging.getLogger("posivex.providers.llm")
+
+
+# Model families identified by a substring of their name.
+THINKING_BUDGET_MODEL_MARKERS = ("2.5", "2.0")  # use thinking_budget, not thinking_level
+NO_MINIMAL_THINKING_MARKERS = ("3.8",)  # need thinking_level LOW at least
+
+
+def uses_thinking_budget(model: str) -> bool:
+    """True for Gemini 2.x models, which take `thinking_budget` instead of `thinking_level`."""
+    return any(marker in model for marker in THINKING_BUDGET_MODEL_MARKERS)
 
 
 def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LLM:
@@ -35,11 +48,12 @@ def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LL
 
             supports_level = _supports_thinking_level(model)
         except Exception:
-            supports_level = not ("2.5" in model or "2.0" in model)
+            logger.debug("Could not ask the Google plugin about thinking levels; guessing from the model name.", exc_info=True)
+            supports_level = not uses_thinking_budget(model)
 
         if supports_level:
             thinking_level_upper = config.thinking_level.upper()
-            if "3.8" in model and thinking_level_upper == "MINIMAL":
+            if any(m in model for m in NO_MINIMAL_THINKING_MARKERS) and thinking_level_upper == "MINIMAL":
                 thinking_level_upper = "LOW"
             thinking_cfg = types.ThinkingConfig(
                 thinking_level=thinking_level_upper,  # type: ignore[arg-type]
@@ -62,18 +76,27 @@ def get_llm(model: str, config: LLMConfig, api_key: str | None = None) -> llm.LL
     raise ValueError(f"Unsupported LLM provider: {config.provider}")
 
 
+def share_thought_signatures(primary: llm.LLM, secondary: llm.LLM) -> None:
+    """Make both Gemini clients use one `_thought_signatures` dict, so a tool-calling turn that starts on one
+    model can continue on the other (`FallbackAdapter` may switch mid-conversation).
+
+    This writes a private attribute of the LiveKit Google plugin; the exact version pin (livekit-agents==1.8.10)
+    is what keeps it safe, and LLMs without that attribute (the test mocks) are left alone.
+    """
+    p_sig = getattr(primary, "_thought_signatures", None)
+    s_sig = getattr(secondary, "_thought_signatures", None)
+    if isinstance(p_sig, dict) and isinstance(s_sig, dict):
+        p_sig.update(s_sig)
+        object.__setattr__(secondary, "_thought_signatures", p_sig)
+
+
 def create_fallback_llm(
     primary: llm.LLM,
     secondary: llm.LLM,
     config: LLMConfig,
 ) -> llm.FallbackAdapter:
     """Wrap primary and secondary LLM instances in a LiveKit FallbackAdapter."""
-    # Ensure thought_signatures are shared between primary and secondary for multi-turn tool calling
-    p_sig = getattr(primary, "_thought_signatures", None)
-    s_sig = getattr(secondary, "_thought_signatures", None)
-    if isinstance(p_sig, dict) and isinstance(s_sig, dict):
-        p_sig.update(s_sig)
-        object.__setattr__(secondary, "_thought_signatures", p_sig)
+    share_thought_signatures(primary, secondary)
 
     # Google GenAI API enforces a minimum RPC deadline of 10.0s.
     attempt_timeout = max(10.0, config.cascade_timeout)

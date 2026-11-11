@@ -27,6 +27,11 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_utc(moment: datetime) -> datetime:
+    """`moment` as an aware UTC datetime. SQLite drops time zones; every stored time is UTC, so a naive value is UTC."""
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+
+
 class CallStatus(enum.StrEnum):
     """Lifecycle status of a phone call."""
 
