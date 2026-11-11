@@ -357,3 +357,67 @@ If any issue arises:
 2. Restore `ELEVENLABS_WEBHOOK_SECRET` to the original ElevenLabs signing secret if you changed it.
 3. Restart `Posivex-lead-gen`. New calls go through ElevenLabs again; calls already placed through this service still finish and report.
 
+
+## 9. Moving to a new LiveKit Cloud project
+
+Build the new project completely next to the old one, test it with a separate API instance that never touches production, then switch four variables on the server. The old project keeps working until you delete it, so rolling back is restoring those four variables.
+
+**What lives inside a LiveKit project and must be recreated:** the outbound SIP trunk, the Cloud agent and its secrets, and the API key and secret. **What does not move:** the Telnyx account and number, lead-gen, Postgres, the S3 recordings (each recording request carries the S3 credentials), the prompts.
+
+**What the server uses:** `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` and `SIP_OUTBOUND_TRUNK_ID` in `.env`. The Cloud agent gets its own URL and keys injected by LiveKit.
+
+### 9.1 Prepare the new project (from the machine with the repo; production is not touched)
+
+1. Save the project in the `lk` CLI under a name, **not** as default:
+   `lk project add posivex-new --url wss://<new>.livekit.cloud --api-key <KEY> --api-secret <SECRET>`
+   The deploy script now refuses to run unless the project from `.env.prod` is saved with the same key. (`lk --subdomain` alone silently falls back to the CLI's default project, which is why this matters.)
+2. Check it is the empty project you expect: `lk agent list --project posivex-new` and `lk sip outbound list --project posivex-new` should show nothing. In the LiveKit dashboard check the plan and that the project region is in the US.
+3. Create the trunk **in the new project**. The credentials are the Telnyx SIP connection's user and password (Telnyx portal). Inline variables win over `.env`, so the old project cannot be hit by mistake; the script prints the URL it connects to:
+   `LIVEKIT_URL=wss://<new>.livekit.cloud LIVEKIT_API_KEY=<KEY> LIVEKIT_API_SECRET=<SECRET> uv run python scripts/setup_telnyx_trunk.py --phone +14706000407 --sip-user <USER> --sip-pass <PASS> --name Telnyx-NoHeader`
+   Note the printed `SIP_OUTBOUND_TRUNK_ID`. It builds the same trunk as the live one (US destination, no username header; add `--username-header` only if you ever need it). If the Telnyx connection is restricted by IP, LiveKit Cloud's SIP addresses are the same for every project.
+4. Keep the old file and point `.env.prod` at the new project: `cp .env.prod .env.prod.old`, then change `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`. Everything else in it stays.
+5. `livekit.toml` records the last deploy's project and agent id. Move it aside so the agent is created in the new project, then dry-run and deploy:
+   `mv livekit.toml livekit.<old-subdomain>.toml`
+   `uv run python scripts/deploy_agent.py --dry-run` (shows `lk project: posivex-new`; stop if it does not)
+   `uv run python scripts/deploy_agent.py`
+   Commit the new `livekit.toml` (it holds a subdomain and an agent id, no secrets). Check: `lk agent status --project posivex-new`.
+
+### 9.2 Test it in isolation (on the server; production API untouched)
+
+Run a second API instance, API only (the `api` command has no outbox worker), on port 8001 with the new project's four variables. The compose service reads `.env`; `-e` overrides it:
+
+```bash
+docker compose run --rm -d --name posivex_api_test -p 127.0.0.1:8001:8000 \
+  -e LIVEKIT_URL=wss://<new>.livekit.cloud -e LIVEKIT_API_KEY=<KEY> -e LIVEKIT_API_SECRET=<SECRET> \
+  -e SIP_OUTBOUND_TRUNK_ID=<ST_new> \
+  posivex_api api --host 0.0.0.0 --port 8000
+curl -s http://127.0.0.1:8001/health/ready
+```
+
+Dial your own phone through it (the key is `POSIVEX_API_KEY` from `.env`):
+
+```bash
+curl -s -X POST http://127.0.0.1:8001/v1/convai/sip-trunk/outbound-call \
+  -H "xi-api-key: $POSIVEX_API_KEY" -H "Content-Type: application/json" \
+  -d '{"agent_id":"agent_posivex_amelia","to_number":"+1YOURNUMBER","conversation_initiation_client_data":{"dynamic_variables":{"business_name":"Test Pizza","contact_name":"Khizar"}}}'
+```
+
+Check, in this order: the phone rings and the opener plays about a second after you answer; the conversation works; after hanging up, `curl -s -H "xi-api-key: $POSIVEX_API_KEY" http://127.0.0.1:8001/v1/convai/conversations/<conversation_id>` shows `done` with an outcome and the `timing_*` events; `.../audio` plays (the recording went through the new project's egress to S3); `lk agent logs --project posivex-new` shows the call. The finished call is reported to `RESULTS_CALLBACK_URL`, which is the production API, so its outbox delivers it to lead-gen and it appears there as a manual call.
+
+Cases to try: answered and talking; a number that goes to voicemail (hangs up within seconds, outcome `voicemail`); declined or unanswered (`no_answer`); hanging up during the opener. Then `docker stop posivex_api_test`.
+
+### 9.3 Cut over
+
+1. Pause campaigns in lead-gen and wait for no active calls:
+   `docker compose exec postgres psql -U posivex -d posivex_calls -c "select count(*) from calls where status in ('queued','in_progress')"` (use your `POSTGRES_USER` and `POSTGRES_DB` if they are not the defaults).
+2. `cp .env .env.bak-livekit`, then change the four variables in `.env`.
+3. `docker compose up -d --force-recreate posivex_api` (`--force-recreate` because Docker does not notice changes inside `env_file`). Check `docker compose logs --tail=50 posivex_api` and `curl -s http://127.0.0.1:8000/health/ready`.
+4. Start one call from lead-gen, confirm it end to end, then resume campaigns.
+
+### 9.4 Roll back
+
+`cp .env.bak-livekit .env && docker compose up -d --force-recreate posivex_api`. The old project and its agent were never changed, and calls already placed still report to the API.
+
+### 9.5 Afterwards
+
+Keep the old project for a week, then delete its agent, trunk or the project itself. Rotate any LiveKit key that was shared outside the repo and `.env` files.

@@ -61,7 +61,33 @@ def parse_args() -> argparse.Namespace:
             "dial request, which is far from the callee when the API runs elsewhere."
         ),
     )
+    parser.add_argument(
+        "--username-header",
+        action="store_true",
+        help=(
+            "Also send the SIP username in an X-Telnyx-Username header on the first INVITE. Off by default: the "
+            "trunk that is live and working (Telnyx-NoHeader) sends no header."
+        ),
+    )
     return parser.parse_args()
+
+
+def build_trunk(args: argparse.Namespace) -> api.SIPOutboundTrunkInfo:
+    """The trunk to create: the same shape as the live one (address, number, US destination, credentials)."""
+    trunk = api.SIPOutboundTrunkInfo(
+        name=args.name,
+        address=args.sip_host,
+        numbers=[args.phone],
+        destination_country=args.destination_country,
+        auth_username=args.sip_user,
+        auth_password=args.sip_pass,
+    )
+    if args.username_header:
+        # Telnyx docs: send the username in the first INVITE so Telnyx always answers with a 407 challenge instead
+        # of matching a connection by source IP.
+        trunk.headers["X-Telnyx-Username"] = args.sip_user
+        trunk.headers_to_attributes["X-Telnyx-Username"] = args.sip_user
+    return trunk
 
 
 async def register_trunk(args: argparse.Namespace) -> None:
@@ -84,20 +110,7 @@ async def register_trunk(args: argparse.Namespace) -> None:
 
     lkapi = api.LiveKitAPI(url=livekit_url, api_key=api_key, api_secret=api_secret)
 
-    trunk_info = api.SIPOutboundTrunkInfo(
-        name=args.name,
-        address=args.sip_host,
-        numbers=[args.phone],
-        destination_country=args.destination_country,
-        auth_username=args.sip_user,
-        auth_password=args.sip_pass,
-        # Telnyx docs: send the username in the first INVITE so Telnyx always
-        # answers with a 407 challenge instead of matching a connection by source IP.
-        # `headers` adds it to the INVITE; `headers_to_attributes` is the field the
-        # LiveKit Telnyx guide names. Setting both is harmless.
-        headers={"X-Telnyx-Username": args.sip_user},
-        headers_to_attributes={"X-Telnyx-Username": args.sip_user},
-    )
+    trunk_info = build_trunk(args)
 
     request = api.CreateSIPOutboundTrunkRequest(trunk=trunk_info)
 
@@ -111,7 +124,7 @@ async def register_trunk(args: argparse.Namespace) -> None:
         print("\nNext step: Add this Trunk ID to your server's .env file:")
         print("TELEPHONY_PROVIDER=livekit_sip")
         print(f"SIP_OUTBOUND_TRUNK_ID={trunk_id}")
-        print(f"SIP_PHONE_NUMBER_ID={args.phone}\n")
+        print()
     except Exception as e:
         print(f"❌ Failed to create SIP Outbound Trunk: {e}")
         sys.exit(1)

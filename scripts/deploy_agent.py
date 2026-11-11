@@ -4,6 +4,10 @@
     uv run python scripts/deploy_agent.py               # create the agent the first time, deploy after that
     uv run python scripts/deploy_agent.py --region us-east
 
+The LiveKit project is taken from LIVEKIT_URL in the env file and must already be saved in the `lk` CLI
+(`lk project add NAME --url ... --api-key ... --api-secret ...`) with the same API key; the deploy is then
+pinned to it with `--project NAME`. Without that the CLI would fall back to its default project.
+
 Only the variables the agent needs are sent. LIVEKIT_URL/KEY/SECRET are injected by LiveKit Cloud itself, and
 the database and webhook settings belong to the API on your server, so none of those leave this machine.
 The secrets go to LiveKit in a temporary file that is deleted afterwards; the image never contains them
@@ -19,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -117,6 +122,61 @@ def livekit_subdomain(env_file: Path) -> str:
     return host.removesuffix(".livekit.cloud")
 
 
+def cli_projects() -> list[dict[str, str]]:
+    """The projects saved in the `lk` CLI: name, URL and API key (never the secret)."""
+    lk = shutil.which("lk")
+    if not lk:
+        raise DeployError("The LiveKit CLI (lk) is not installed. https://docs.livekit.io/home/cli/")
+    result = subprocess.run([lk, "project", "list", "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    text = result.stdout or ""
+    try:
+        rows = json.loads(text[text.index("[") :]) if "[" in text else []
+    except ValueError:
+        rows = []
+    return [{"name": r.get("Name", ""), "url": r.get("URL", ""), "key": r.get("APIKey", "")} for r in rows]
+
+
+def resolve_cli_project(env_file: Path, projects: list[dict[str, str]]) -> str:
+    """The saved CLI project that matches the env file's LIVEKIT_URL and API key. Raises if there is none.
+
+    `lk --subdomain` only picks among saved projects and otherwise falls back to the CLI's default project, so a
+    deploy meant for a new LiveKit account could silently land in the old one. Naming the project avoids that.
+    """
+    values = dotenv_values(env_file)
+    host = urlparse(values.get("LIVEKIT_URL") or "").hostname or ""
+    key = (values.get("LIVEKIT_API_KEY") or "").strip()
+    same_url = [p for p in projects if urlparse(p["url"]).hostname == host]
+    if not same_url:
+        raise DeployError(
+            f"No project for {host} is saved in the lk CLI. Add it first (the key and secret are the ones in "
+            f"{env_file.name}):\n  lk project add NAME --url wss://{host} --api-key <LIVEKIT_API_KEY> --api-secret <LIVEKIT_API_SECRET>"
+        )
+    matching = [p for p in same_url if p["key"] == key]
+    if not matching:
+        raise DeployError(
+            f"The lk CLI has {host} saved under a different API key than {env_file.name}. "
+            f"Remove it (lk project remove {same_url[0]['name']}) and add it again with the right key."
+        )
+    return matching[0]["name"]
+
+
+def check_livekit_toml(subdomain: str, toml_path: Path | None = None) -> None:
+    """livekit.toml names the project and agent of the last deploy. For another project it must be moved aside."""
+    path = toml_path or ROOT / "livekit.toml"
+    if not path.exists():
+        return
+    try:
+        recorded = tomllib.loads(path.read_text(encoding="utf-8")).get("project", {}).get("subdomain", "")
+    except (tomllib.TOMLDecodeError, OSError):
+        recorded = ""
+    if recorded and recorded != subdomain:
+        raise DeployError(
+            f"livekit.toml belongs to the project {recorded}, but the env file points at {subdomain}. For a new "
+            f"project move it aside so the agent is created there, then commit the new file:\n"
+            f"  mv livekit.toml livekit.{recorded}.toml"
+        )
+
+
 def preflight_callback(url: str, secret: str, timeout: float = 15.0) -> str:
     """Check the API's results endpoint is reachable and accepts the secret, without storing anything.
 
@@ -165,9 +225,11 @@ def main() -> int:
     try:
         secrets = load_secrets(env_file)
         subdomain = livekit_subdomain(env_file)
+        project = resolve_cli_project(env_file, cli_projects())
+        check_livekit_toml(subdomain)
 
         print(f"Env file     : {env_file.name}")
-        print(f"LiveKit      : {subdomain}.livekit.cloud   region: {args.region}")
+        print(f"LiveKit      : {subdomain}.livekit.cloud   region: {args.region}   (lk project: {project})")
         print(f"Agent name   : {secrets['LIVEKIT_AGENT_NAME']}")
         print(f"Results URL  : {secrets['RESULTS_CALLBACK_URL']}")
         print(f"Recording    : {'on, bucket ' + secrets.get('RECORDING_BUCKET', '') if secrets.get('RECORDING_ENABLED', '').lower() == 'true' else 'off'}")
@@ -195,8 +257,8 @@ def main() -> int:
                 [
                     "agent",
                     command,
-                    "--subdomain",
-                    subdomain,
+                    "--project",
+                    project,
                     "--region",
                     args.region,
                     "--secrets-file",

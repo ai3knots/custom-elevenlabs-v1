@@ -130,3 +130,52 @@ def test_preflight_reports_an_unreachable_url(deploy: ModuleType, monkeypatch: p
     fake_urlopen(monkeypatch, urllib.error.URLError("name not resolved"))
     with pytest.raises(deploy.DeployError, match="Cannot reach"):
         deploy.preflight_callback("https://voice.example.com", "s")
+
+
+# ---- the deploy is pinned to the project the env file names -----------------------------------------------------
+SAVED = [
+    {"name": "old", "url": "wss://project-old-xyz.livekit.cloud", "key": "old-key"},
+    {"name": "demo", "url": "wss://project-demo-abc123.livekit.cloud", "key": "lk-key"},
+]
+
+
+def test_the_project_is_found_by_url_and_key(deploy: ModuleType, tmp_path: Path) -> None:
+    assert deploy.resolve_cli_project(env_file(tmp_path), SAVED) == "demo"
+
+
+def test_a_project_the_cli_does_not_know_is_refused_with_the_command_to_add_it(
+    deploy: ModuleType, tmp_path: Path
+) -> None:
+    """lk would fall back to its default project (the old account) instead."""
+    with pytest.raises(deploy.DeployError, match=r"lk project add NAME --url wss://project-demo-abc123\.livekit\.cloud"):
+        deploy.resolve_cli_project(env_file(tmp_path), SAVED[:1])
+
+
+def test_a_project_saved_under_another_key_is_refused(deploy: ModuleType, tmp_path: Path) -> None:
+    other = [{"name": "demo", "url": "wss://project-demo-abc123.livekit.cloud", "key": "different"}]
+    with pytest.raises(deploy.DeployError, match="different API key"):
+        deploy.resolve_cli_project(env_file(tmp_path), other)
+
+
+def test_livekit_toml_of_another_project_must_be_moved_aside(deploy: ModuleType, tmp_path: Path) -> None:
+    toml = tmp_path / "livekit.toml"
+    toml.write_text('[project]\n  subdomain = "project-old-xyz"\n\n[agent]\n  id = "CA_old"\n', encoding="utf-8")
+    with pytest.raises(deploy.DeployError, match=r"mv livekit\.toml livekit\.project-old-xyz\.toml"):
+        deploy.check_livekit_toml("project-demo-abc123", toml)
+    deploy.check_livekit_toml("project-old-xyz", toml)  # the same project: fine
+    deploy.check_livekit_toml("project-demo-abc123", tmp_path / "missing.toml")  # no file: fine
+
+
+def test_the_deploy_names_the_project_instead_of_a_subdomain(
+    deploy: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent: list[list[str]] = []
+    monkeypatch.setattr(deploy, "cli_projects", lambda: SAVED)
+    monkeypatch.setattr(deploy, "run_lk", lambda args: sent.append(args) or 0)
+    monkeypatch.setattr(deploy, "ROOT", tmp_path)  # no livekit.toml here: the first deploy creates the agent
+    monkeypatch.setattr("sys.argv", ["deploy_agent.py", "--env-file", str(env_file(tmp_path)), "--skip-preflight"])
+    assert deploy.main() == 0
+    args = sent[0]
+    assert args[:2] == ["agent", "create"]
+    assert args[args.index("--project") + 1] == "demo" and "--subdomain" not in args
+    assert "lk project: demo" in capsys.readouterr().out
