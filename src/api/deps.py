@@ -57,9 +57,15 @@ def verify_xi_api_key(
             detail="Invalid or missing xi-api-key",
         )
 
-    # A dedicated POSIVEX_API_KEY wins; otherwise the ElevenLabs key doubles as the shared key.
+    # A dedicated POSIVEX_API_KEY wins; otherwise the ElevenLabs key doubles as the shared key. With neither set
+    # there is nothing to check against, and accepting any key would leave the dial route open: refuse instead.
     expected = settings.voice_api_key or settings.elevenlabs_api_key
-    if expected and not hmac.compare_digest(xi_api_key, expected):
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The API key is not configured (POSIVEX_API_KEY)",
+        )
+    if not hmac.compare_digest(xi_api_key, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing xi-api-key",

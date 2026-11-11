@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -271,12 +271,11 @@ class CallRecorder:
         """Count calls that are queued or in progress and not abandoned (started within the stale window)."""
         cutoff = datetime.now(UTC) - timedelta(seconds=STALE_ACTIVE_CALL_SECS)
         async with self.session_factory() as session:
-            stmt = select(Call).where(
+            stmt = select(func.count()).select_from(Call).where(
                 Call.status.in_([CallStatus.QUEUED.value, CallStatus.IN_PROGRESS.value]),
                 Call.created_at >= cutoff,
             )
-            res = await session.execute(stmt)
-            return len(res.scalars().all())
+            return int((await session.execute(stmt)).scalar_one())
 
     async def get_transcripts(self, call_id: str) -> list[Transcript]:
         async with self.session_factory() as session:

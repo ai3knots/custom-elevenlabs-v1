@@ -1,6 +1,5 @@
 log_level: "INFO"
 persona: "amelia"
-language: "en"
 
 # Provider Settings
 stt:
@@ -122,7 +121,7 @@ recording:
   file_type: "ogg"
 
 telephony:
-  provider: "mock"
+  provider: "livekit_sip" # mock and console exist for tests and dry runs; set TELEPHONY_PROVIDER to use them
   sip_trunk_id: null
   max_concurrent_calls: 50
 

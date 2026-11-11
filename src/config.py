@@ -158,7 +158,7 @@ class WebhookConfig(BaseModel):
 class TelephonyConfig(BaseModel):
     """Telephony provider configuration."""
 
-    provider: Literal["livekit_sip", "mock", "console"] = "mock"
+    provider: Literal["livekit_sip", "mock", "console"] = "livekit_sip"
     sip_trunk_id: str | None = None
     max_concurrent_calls: int = 50
 
@@ -202,7 +202,6 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
     persona: Literal["amelia", "michael"] = "amelia"
-    language: Literal["en", "es"] = "en"
 
     # Core Infrastructure Secrets
     livekit_url: str = ""
@@ -283,6 +282,11 @@ class DynamicVariables(BaseModel):
     contact_name: str = ""
 
 
+# `config_overrides` on a call request may only tune the conversation. Anything else (recording credentials, the
+# webhook target, telephony, a knowledge-base file path) would let whoever can dial change infrastructure settings.
+ALLOWED_OVERRIDE_SECTIONS = frozenset({"stt", "llm", "tts", "vad", "turn_detector", "conversation"})
+
+
 class CallRequest(BaseModel):
     """Validated call request schema for both native and emulated dial endpoints."""
 
@@ -322,6 +326,16 @@ class CallRequest(BaseModel):
                 values["dynamic_variables"] = client_data["dynamic_variables"]
 
         return values
+
+    @field_validator("config_overrides")
+    @classmethod
+    def only_conversation_overrides(cls, v: dict[str, Any]) -> dict[str, Any]:
+        disallowed = sorted(set(v) - ALLOWED_OVERRIDE_SECTIONS)
+        if disallowed:
+            raise ValueError(
+                f"config_overrides may only set {sorted(ALLOWED_OVERRIDE_SECTIONS)}, not {disallowed}"
+            )
+        return v
 
     @field_validator("phone")
     @classmethod

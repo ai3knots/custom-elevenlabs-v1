@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config import Settings
-from src.db.models import WebhookOutbox, WebhookStatus
+from src.db.models import WebhookOutbox, WebhookStatus, as_utc
 from src.metrics.prometheus import POSIVEX_WEBHOOK_DELIVERIES_TOTAL
 from src.webhook.signer import sign_payload
 
@@ -23,6 +23,9 @@ ERROR_EXCERPT_CHARS = 200  # how much of a failed response or exception is store
 INITIAL_BACKOFF_SECS = 2.0
 MAX_BACKOFF_SECS = 3600.0
 BATCH_SIZE = 50
+# A claimed entry is not handed out again until this long has passed: two workers never deliver the same webhook,
+# and one killed mid-delivery is picked up again after the lease.
+DELIVERY_LEASE_SECS = 60.0
 
 
 def calculate_backoff_seconds(
@@ -52,7 +55,8 @@ class WebhookOutboxWorker:
     async def deliver_entry(self, entry_id: str) -> bool:
         """Attempt delivery of a single outbox record by ID."""
         async with self.session_factory() as session:
-            stmt = select(WebhookOutbox).where(WebhookOutbox.id == entry_id)
+            # FOR UPDATE SKIP LOCKED where the database has it (Postgres): a second worker skips a row being claimed.
+            stmt = select(WebhookOutbox).where(WebhookOutbox.id == entry_id).with_for_update(skip_locked=True)
             res = await session.execute(stmt)
             entry = res.scalar_one_or_none()
 
@@ -62,7 +66,12 @@ class WebhookOutboxWorker:
             ):
                 return False
 
+            now = datetime.now(UTC)
+            if entry.status == WebhookStatus.PROCESSING.value and as_utc(entry.next_retry_at) > now:
+                return False  # another worker holds the lease
+
             entry.status = WebhookStatus.PROCESSING.value
+            entry.next_retry_at = now + timedelta(seconds=DELIVERY_LEASE_SECS)
             await session.commit()
 
         # Build payload and compute signature

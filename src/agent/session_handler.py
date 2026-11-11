@@ -37,7 +37,7 @@ from src.agent.silence import nudge_and_rearm, watch_for_silence
 from src.analysis import CallSignals, classify_transcript, resolve_call_outcome
 from src.config import CallRequest, Settings, load_settings
 from src.db.base import get_engine, get_sessionmaker
-from src.logging import set_call_id
+from src.logging import mask_phone, set_call_id
 from src.metrics.costs import CostAccumulator
 from src.persistence.recorder import CallRecorder
 from src.persistence.remote import RemoteRecorder
@@ -74,10 +74,22 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
             raise ValueError("metadata JSON must be an object")
         return CallRequest.model_validate(data)
     except Exception as e:
-        logger.error("Failed to parse call metadata: %s (raw: %s)", e, room_metadata[:LOGGED_METADATA_CHARS])
+        # Not the metadata itself or the error text (a validation error repeats the values): they hold the phone number.
+        logger.error("Failed to parse call metadata (%s, %d characters): %s", type(e).__name__, len(room_metadata), _describe_parse_error(e))
         if allow_default:
             return CallRequest(phone=DEV_PLACEHOLDER_PHONE)
         raise ValueError(f"Invalid call metadata: {e}") from e
+
+
+def _describe_parse_error(e: Exception) -> str:
+    """Which fields were wrong, without their values."""
+    errors = getattr(e, "errors", None)
+    if callable(errors):
+        try:
+            return ", ".join(".".join(str(part) for part in err["loc"]) + f" ({err['type']})" for err in errors())
+        except Exception:
+            return "invalid fields"
+    return "not a JSON object"
 
 
 def _resolve_raw_metadata(ctx: JobContext) -> str | None:
@@ -143,8 +155,7 @@ SHUTDOWN_PROCESS_TIMEOUT_SECS = 120.0
 # Stand-in number used only with ALLOW_DEFAULT_CALL_REQUEST=true (local development).
 DEV_PLACEHOLDER_PHONE = "+14045550000"
 
-# How much of the raw dispatch metadata is logged on a parse error, and of the callee's words kept in a rationale.
-LOGGED_METADATA_CHARS = 500
+# How much of the callee's words is kept in a rationale.
 RATIONALE_TEXT_CHARS = 200
 
 
@@ -281,7 +292,7 @@ async def run_agent_session(
     logger.info(
         "Starting agent session for call_id=%s, phone=%s, persona=%s, language=%s",
         call_id,
-        call_request.phone,
+        mask_phone(call_request.phone),
         call_request.persona,
         call_request.language,
     )

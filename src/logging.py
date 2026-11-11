@@ -28,6 +28,15 @@ SENSITIVE_KEY_PATTERNS = [
 # Credit card number pattern (basic 13-19 digit card numbers)
 CC_PATTERN = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
 
+# Phone numbers in E.164 form. Logs keep the last four digits, enough to tell calls apart.
+PHONE_PATTERN = re.compile(r"\+\d{7,14}(\d{4})\b")
+
+
+def mask_phone(phone: str | None) -> str:
+    """`+14045551234` as `***1234`; an empty or short value as `***`."""
+    digits = re.sub(r"\D", "", phone or "")
+    return f"***{digits[-4:]}" if len(digits) >= 8 else "***"
+
 
 def set_call_id(call_id: str | None) -> None:
     """Set the current call ID for context propagation."""
@@ -53,6 +62,7 @@ def redact_sensitive_data(obj: Any) -> Any:
     elif isinstance(obj, list):
         return [redact_sensitive_data(item) for item in obj]
     elif isinstance(obj, str):
+        obj = PHONE_PATTERN.sub(r"***\1", obj)
         # Scrub credit card numbers
         if len(obj) >= 13 and re.search(r"\d", obj):
             return CC_PATTERN.sub(REDACTED_TEXT, obj)
