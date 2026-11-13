@@ -1,6 +1,8 @@
 """Noise cancellation on the callee's audio: on by default, switchable, and never the reason a call fails."""
 
 import logging
+import subprocess
+import sys
 
 import pytest
 from livekit import rtc
@@ -8,6 +10,7 @@ from livekit.agents import room_io
 from livekit.plugins import noise_cancellation
 from pydantic import ValidationError
 
+from src.agent import room_options as room_options_module
 from src.agent.room_options import build_noise_cancellation, build_room_options
 from src.config import Settings, load_settings
 
@@ -62,3 +65,22 @@ def test_a_single_call_can_turn_it_off_through_the_allowed_overrides() -> None:
 
 def test_concurrency_ceiling_matches_the_ship_plan() -> None:
     assert load_settings().telephony.max_concurrent_calls == 20
+
+
+def test_a_missing_plugin_does_not_fail_the_call(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(room_options_module, "_noise_cancellation", None)
+    with caplog.at_level(logging.WARNING, logger="posivex.session"):
+        options, on = build_room_options("krisp_nc")
+    assert on is False
+    assert options == room_io.RoomOptions(delete_room_on_close=True)
+    assert "could not be loaded" in caplog.text
+
+
+def test_the_plugin_is_loaded_when_the_worker_starts_not_during_a_call() -> None:
+    """Importing the agent module (what a worker process does at start-up) must already load the plugin.
+
+    In a fresh interpreter, so earlier tests cannot have imported it. Loading it inside a call blocked the event loop for ~300 ms.
+    """
+    code = "import sys, src.agent.session_handler; print('livekit.plugins.noise_cancellation' in sys.modules)"
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, check=True)
+    assert result.stdout.strip().splitlines()[-1] == "True"

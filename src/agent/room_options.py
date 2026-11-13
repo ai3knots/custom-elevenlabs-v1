@@ -15,6 +15,14 @@ from livekit.agents import room_io
 
 logger = logging.getLogger("posivex.session")
 
+# Imported when the worker process starts, not on the first call: loading the plugin took about 300 ms of blocked event
+# loop, which froze the audio of every call running in that process. A plugin that cannot be loaded is not fatal.
+try:
+    from livekit.plugins import noise_cancellation as _noise_cancellation
+except Exception:
+    _noise_cancellation = None
+    logger.warning("The Krisp noise cancellation plugin could not be imported; calls will use the raw audio.", exc_info=True)
+
 KRISP_NC = "krisp_nc"
 NO_NOISE_CANCELLATION = "none"
 
@@ -30,10 +38,11 @@ def build_noise_cancellation(mode: str) -> rtc.NoiseCancellationOptions | None:
     if mode != KRISP_NC:
         logger.warning("Unknown noise cancellation mode %r; continuing without it.", mode)
         return None
+    if _noise_cancellation is None:
+        logger.warning("Krisp noise cancellation could not be loaded; continuing without it.")
+        return None
     try:
-        from livekit.plugins import noise_cancellation
-
-        return noise_cancellation.NC()
+        return _noise_cancellation.NC()
     except Exception:
         logger.warning("Krisp noise cancellation could not be loaded; continuing without it.", exc_info=True)
         return None
