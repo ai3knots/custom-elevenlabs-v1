@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -222,3 +223,52 @@ async def test_a_successful_dial_does_not_touch_the_room() -> None:
     lkapi.sip.create_sip_participant.return_value = MagicMock(participant_id="p1", sip_call_id="s1")
     await provider.dial(_make_call_request(), room_name="sip_room_9")
     lkapi.room.delete_room.assert_not_awaited()
+
+
+def _provider_with_numbers() -> tuple[LiveKitSIPProvider, MagicMock]:
+    mock_lkapi = MagicMock()
+    mock_lkapi.agent_dispatch.create_dispatch = AsyncMock()
+    mock_lkapi.sip.create_sip_participant = AsyncMock(return_value=api.SIPParticipantInfo(participant_id="p", sip_call_id="s"))
+    settings = Settings(
+        telephony={"provider": "livekit_sip", "sip_trunk_id": "ST_default"},  # type: ignore[arg-type]
+        phone_numbers=[  # type: ignore[arg-type]
+            {"phone_number_id": "phnum_a", "phone_number": "+14705550001", "sip_trunk_id": "ST_a"},
+            {"phone_number_id": "phnum_b", "phone_number": "+14705550002", "sip_trunk_id": "ST_b"},
+            {"phone_number_id": "phnum_untrunked", "phone_number": "+14705550003"},
+        ],
+    )
+    return LiveKitSIPProvider(settings, api_client=mock_lkapi), mock_lkapi
+
+
+async def _trunk_used(provider: LiveKitSIPProvider, lkapi: MagicMock, phone_number_id: str | None) -> str:
+    await provider.dial(_make_call_request(trunk_id=phone_number_id), room_name="room")
+    return lkapi.sip.create_sip_participant.call_args[0][0].sip_trunk_id
+
+
+@pytest.mark.asyncio
+async def test_each_calling_number_dials_through_its_own_trunk() -> None:
+    """Every Telnyx number has its own connection, so the number lead-gen picks decides the LiveKit trunk."""
+    provider, lkapi = _provider_with_numbers()
+    assert await _trunk_used(provider, lkapi, "phnum_a") == "ST_a"
+    assert await _trunk_used(provider, lkapi, "phnum_b") == "ST_b"
+
+
+@pytest.mark.asyncio
+async def test_a_number_without_a_trunk_or_no_number_at_all_uses_the_default_trunk() -> None:
+    provider, lkapi = _provider_with_numbers()
+    assert await _trunk_used(provider, lkapi, "phnum_untrunked") == "ST_default"
+    assert await _trunk_used(provider, lkapi, None) == "ST_default"
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_livekit_trunk_id_is_used_as_given() -> None:
+    provider, lkapi = _provider_with_numbers()
+    assert await _trunk_used(provider, lkapi, "ST_special") == "ST_special"
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_number_id_still_dials_through_the_default_trunk_and_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    provider, lkapi = _provider_with_numbers()
+    with caplog.at_level(logging.WARNING):
+        assert await _trunk_used(provider, lkapi, "phnum_mystery") == "ST_default"
+    assert "phnum_mystery" in caplog.text and "not configured" in caplog.text

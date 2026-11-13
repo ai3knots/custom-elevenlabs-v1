@@ -157,11 +157,16 @@ class AgentEntry(BaseModel):
 
 
 class PhoneNumberEntry(BaseModel):
-    """A calling number lead-gen can pick. Every entry dials through the one configured SIP trunk."""
+    """A calling number lead-gen can pick, and the LiveKit SIP trunk its calls leave through.
+
+    Each Telnyx number has its own SIP connection (its own credentials), so each has its own LiveKit outbound trunk.
+    An entry with no `sip_trunk_id` dials through the default trunk (`telephony.sip_trunk_id`).
+    """
 
     phone_number_id: str
     phone_number: str = ""
     label: str = "Posivex LiveKit number"
+    sip_trunk_id: str | None = None
 
 
 class RecordingConfig(BaseModel):
@@ -226,6 +231,10 @@ class Settings(BaseSettings):
     # agent writes to the database directly, as when it runs on the same host as Postgres.
     results_callback_url: str = ""
     results_callback_secret: str = ""
+
+    def number_entry(self, phone_number_id: str | None) -> PhoneNumberEntry | None:
+        """The configured calling number with this id, or None."""
+        return next((n for n in self.phone_numbers if n.phone_number_id == phone_number_id), None)
 
     def webhook_destination(self) -> str:
         """Full URL of lead-gen's post-call webhook (a bare base URL gets the standard path appended)."""

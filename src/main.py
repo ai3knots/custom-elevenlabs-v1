@@ -16,7 +16,12 @@ from dotenv import load_dotenv
 
 from src.config import Settings, load_settings
 from src.logging import configure_logging
-from src.startup_checks import StartupCheckError, check_recording_storage, check_webhook_config
+from src.startup_checks import (
+    StartupCheckError,
+    check_phone_numbers,
+    check_recording_storage,
+    check_webhook_config,
+)
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -37,6 +42,7 @@ def run_startup_checks(settings: Settings, *, webhook: bool) -> None:
         logger.critical("Refusing to start: %s", e)
         sys.exit(1)
     check_recording_storage(settings)
+    check_phone_numbers(settings)
 
 
 def build_dev_lifespan(

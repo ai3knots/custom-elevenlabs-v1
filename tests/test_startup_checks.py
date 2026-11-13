@@ -13,7 +13,12 @@ from fastapi.testclient import TestClient
 from src.analysis.outcome import CallSignals, classify_transcript
 from src.config import RecordingConfig, Settings
 from src.main import build_dev_lifespan, run_startup_checks
-from src.startup_checks import StartupCheckError, check_recording_storage, check_webhook_config
+from src.startup_checks import (
+    StartupCheckError,
+    check_phone_numbers,
+    check_recording_storage,
+    check_webhook_config,
+)
 from src.storage import verify_bucket_access
 from src.telephony.mock import MockTelephonyProvider
 
@@ -167,3 +172,30 @@ async def test_classifier_builds_its_client_in_a_worker_thread(monkeypatch: pyte
     )
     assert result.outcome == "declined"
     assert seen and seen[0] != main
+
+
+def test_the_configured_calling_numbers_pass_the_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.config import load_settings
+
+    monkeypatch.delenv("VOICE_PHONE_NUMBER_ID", raising=False)
+    monkeypatch.delenv("VOICE_PHONE_NUMBER", raising=False)
+    assert check_phone_numbers(load_settings()) == []
+
+
+def test_the_single_number_variables_are_flagged_because_they_drop_the_other_numbers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.config import load_settings
+
+    monkeypatch.setenv("VOICE_PHONE_NUMBER", "+14706000407")
+    problems = check_phone_numbers(load_settings())
+    assert len(problems) == 1 and "replace the configured calling numbers" in problems[0]
+
+
+def test_a_number_without_a_trunk_is_flagged_when_there_are_several() -> None:
+    settings = Settings(
+        phone_numbers=[  # type: ignore[arg-type]
+            {"phone_number_id": "phnum_a", "sip_trunk_id": "ST_a"},
+            {"phone_number_id": "phnum_b"},
+        ]
+    )
+    problems = check_phone_numbers(settings)
+    assert problems == ["Calling number phnum_b has no sip_trunk_id; it dials through the default trunk."]

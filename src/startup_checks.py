@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from urllib.parse import urlparse
 
 from src.config import Settings
@@ -33,6 +34,32 @@ def check_webhook_config(settings: Settings) -> None:
         "Set it to the same value as VOICE_WEBHOOK_SECRET on lead-gen, then recreate the container "
         "(docker compose up -d --force-recreate)."
     )
+
+
+def check_phone_numbers(settings: Settings) -> list[str]:
+    """Log the calling numbers lead-gen can pick and the trunk each uses. Returns the problems it warned about.
+
+    Never raises: a numbers problem is reported loudly but must not stop the service. Two things are worth a warning: the
+    two `VOICE_PHONE_NUMBER*` variables (they replace the whole configured list with one entry, dropping the other numbers
+    and their trunks) and, when there are several numbers, one that has no trunk of its own.
+    """
+    problems: list[str] = []
+    if os.getenv("VOICE_PHONE_NUMBER_ID") or os.getenv("VOICE_PHONE_NUMBER"):
+        problems.append(
+            "VOICE_PHONE_NUMBER_ID / VOICE_PHONE_NUMBER are set, so they replace the configured calling numbers with one "
+            "entry. Remove them from the environment to use the numbers in config/defaults.yaml."
+        )
+    several = len(settings.phone_numbers) > 1
+    for n in settings.phone_numbers:
+        if several and not n.sip_trunk_id:
+            problems.append(f"Calling number {n.phone_number_id} has no sip_trunk_id; it dials through the default trunk.")
+    for problem in problems:
+        logger.warning(problem)
+    logger.info(
+        "Calling numbers: %s",
+        ", ".join(f"{n.phone_number_id} -> {n.sip_trunk_id or 'default trunk'}" for n in settings.phone_numbers),
+    )
+    return problems
 
 
 def check_recording_storage(settings: Settings) -> str | None:

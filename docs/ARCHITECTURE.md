@@ -158,7 +158,7 @@ Observed timings on the latest test call: ring 8.1 s, opener requested 1.26 s af
 - **Dial:** by agent id. A listed agent goes to the voice API, any other to ElevenLabs.
 - **Read a conversation or recording:** by conversation id. The voice API's ids start with `lk_`; ElevenLabs ids never do.
 - **Agent and number dropdowns:** both providers are merged. Only the listed voice agents are shown from ours. If one provider is down the other's entries still appear.
-- **Our ids:** agents `agent_posivex_amelia` ("Posivex LiveKit - Amelia") and `agent_posivex_michael`, number `phnum_posivex_trunk` ("Posivex LiveKit number"). These ids must be in `VOICE_API_AGENT_IDS`.
+- **Our ids:** agents `agent_posivex_amelia` ("Posivex LiveKit - Amelia") and `agent_posivex_michael`, calling numbers `phnum_posivex_trunk`, `phnum_posivex_0298`, `phnum_posivex_0186` and `phnum_posivex_7057` (each with its own LiveKit trunk, see RUNBOOK 7.6a). These ids must be in `VOICE_API_AGENT_IDS`.
 - **Switching a campaign back:** choose an ElevenLabs agent. Calls already placed through the voice API keep being read from it by their `lk_` id.
 
 ### 4.4 Dialing safety (summary of `call-pipeline-safety.md` and `call-queue.md`)
@@ -210,7 +210,7 @@ All `/v1/convai/*` routes need the header `xi-api-key` equal to the voice API ke
 |---|---|---|
 | `POST /v1/convai/sip-trunk/outbound-call` | lead-gen | Place a call |
 | `GET /v1/convai/agents` | lead-gen | List our agents (`agent_posivex_amelia`, `agent_posivex_michael`) |
-| `GET /v1/convai/phone-numbers` | lead-gen | List our number (`phnum_posivex_trunk`) |
+| `GET /v1/convai/phone-numbers` | lead-gen | List our numbers (four, `phnum_posivex_*`) |
 | `GET /v1/convai/conversations` and `/{id}` | lead-gen | List and read conversations in ElevenLabs format |
 | `GET /v1/convai/conversations/{id}/audio` | lead-gen | Stream the recording from S3 (descriptive 404 when there is none yet) |
 | `POST /internal/calls/{id}/result` | Cloud agent | Report a finished call. Needs header `X-Posivex-Callback-Secret`. Safe to repeat |
@@ -220,7 +220,7 @@ All `/v1/convai/*` routes need the header `xi-api-key` equal to the voice API ke
 
 ### 5.3 Dispatching a call
 
-`LiveKitSIPProvider.dial` creates the agent dispatch (`agent_name` from `LIVEKIT_AGENT_NAME`, default `posivex-agent`, with the whole call request as metadata) and the SIP participant. Lead-gen sends its own calling-number id (for example `phnum_posivex_trunk`), which is not a LiveKit trunk id, so only an explicit LiveKit id (`ST_…`) overrides the configured trunk (`SIP_OUTBOUND_TRUNK_ID`). The API picks the persona from the agent id; an unknown id is served by Amelia.
+`LiveKitSIPProvider.dial` creates the agent dispatch (`agent_name` from `LIVEKIT_AGENT_NAME`, default `posivex-agent`, with the whole call request as metadata) and the SIP participant. Lead-gen sends the id of the calling number it picked (for example `phnum_posivex_0298`). It names an entry in `phone_numbers`, whose `sip_trunk_id` is the trunk of that number's own Telnyx connection; an explicit LiveKit id (`ST_…`) is used as given; anything else (no id, an id that is not listed) uses the default trunk (`SIP_OUTBOUND_TRUNK_ID`) and logs a warning. The API picks the persona from the agent id; an unknown id is served by Amelia.
 
 ### 5.4 The database (Postgres 16)
 
@@ -331,7 +331,7 @@ Cloud agent ── LiveKit room ── LiveKit SIP (outbound trunk ST_Sf8PZnHSN7
 
 - **Carrier:** Telnyx. The trunk authenticates with a Telnyx SIP username and password. Outbound US calls cost about $0.005 a minute (check the Telnyx call report for the true rate).
 - **Region of the phone leg:** LiveKit starts an outbound SIP leg in the region of whoever makes the dial request. That request comes from Pakistan, so `destination_country = us` was set on the trunk (9 Nov) to start it on a US server (Ashburn, Chicago or Phoenix). Whether the LiveKit **room** is also in the US is not documented by LiveKit and cannot be read after a call; the dashboard session page may show it.
-- **The same number is also registered in the ElevenLabs workspace** (as `phnum_0301m4trff2te4zbjxyaxne8y621`, "Telnyx No 4") for the legacy path. Lead-gen should use `phnum_posivex_trunk` for LiveKit calls. The voice API ignores any calling-number id that is not a LiveKit trunk id and dials through its own trunk either way.
+- **The same number is also registered in the ElevenLabs workspace** (as `phnum_0301m4trff2te4zbjxyaxne8y621`, "Telnyx No 4") for the legacy path. Lead-gen should use `phnum_posivex_trunk` for LiveKit calls. An id that is not one of ours dials through the default trunk.
 - **Failure codes** surface in lead-gen: SIP 404, 604, 410 and 484 mark a number invalid after one refusal; 486, 603, 480, 408 and 600 are calls that reached nobody; 401, 403 and 407 mean the carrier refused our account (circuit breaker).
 
 ---

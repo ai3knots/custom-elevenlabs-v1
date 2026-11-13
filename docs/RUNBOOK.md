@@ -278,7 +278,7 @@ On this service (`.env`):
 | `POSIVEX_API_KEY` | Key lead-gen sends as `xi-api-key` (any long random value) |
 | `LEAD_GEN_WEBHOOK_URL` | Lead-gen's public URL, for example `https://xyz.thebestdevsolutions.space` (the webhook path is added). The default `http://localhost:3000` is wrong for production |
 | `ELEVENLABS_WEBHOOK_SECRET` | The secret this service signs webhooks with; lead-gen's `VOICE_WEBHOOK_SECRET` must equal it |
-| `VOICE_PHONE_NUMBER_ID` / `VOICE_PHONE_NUMBER` | The calling number lead-gen shows and stores (default id `phnum_posivex_trunk`) |
+| `VOICE_PHONE_NUMBER_ID` / `VOICE_PHONE_NUMBER` | **Leave unset.** They replace the list of calling numbers in `config/defaults.yaml` (four numbers, each with its own trunk) with a single entry; the API logs a warning at start if they are set |
 | `RESULTS_CALLBACK_URL` / `RESULTS_CALLBACK_SECRET` | Only for an agent that cannot reach Postgres (LiveKit Cloud): the API's public URL and a shared secret. Leave unset when the agent runs next to the database |
 | `RECORDING_ENABLED`, `RECORDING_BUCKET`, `RECORDING_REGION`, `RECORDING_ENDPOINT`, `RECORDING_ACCESS_KEY`, `RECORDING_SECRET`, `RECORDING_PREFIX` | Call recording (below) |
 
@@ -347,6 +347,35 @@ over HTTPS (7.3), so it never needs the database.
    name as the Cloud agent): `docker compose up -d --build --remove-orphans posivex_api`, or `docker rm -f posivex_agent`.
    To roll the agent back, see 7.7.
 5. **Watch it:** `lk agent logs`, `lk agent status`. Calls still finish through the API's outbox to lead-gen.
+
+### 7.6a Calling numbers: one trunk per Telnyx connection
+
+Each Telnyx number has its own SIP connection (its own username and password), so each has its own LiveKit outbound trunk. `phone_numbers:`
+in `config/defaults.yaml` maps the id lead-gen picks to the number and to that trunk (`sip_trunk_id`). The call leaves through the trunk of the
+number picked; no id, an id that is not listed, or an entry with no `sip_trunk_id` uses the default trunk (`SIP_OUTBOUND_TRUNK_ID`).
+
+| `phone_number_id` | Number | Trunk |
+|---|---|---|
+| `phnum_posivex_trunk` | +14706000407 | `ST_dxuzWBcRJC94` (`Telnyx-NoHeader`) |
+| `phnum_posivex_0298` | +14703610298 | `ST_dtEZaHJHXPjk` (`Telnyx-0298`) |
+| `phnum_posivex_0186` | +14707630186 | `ST_bbrs7okbYU2s` (`Telnyx-0186`) |
+| `phnum_posivex_7057` | +14707427057 | `ST_ZhFrYvSfd9po` (`Telnyx-7057`) |
+
+**Adding a number.** The password stays out of the repository and out of chat; it goes straight to the script as an environment variable.
+1. In Telnyx, assign the number to its SIP connection and check the connection's outbound voice profile allows US calls.
+2. Create the trunk in the project named in `.env.prod` (`LIVEKIT_URL`); `lk sip outbound list --project posivex-new` shows it afterwards:
+   `uv run python scripts/setup_telnyx_trunk.py --phone +1XXXXXXXXXX --sip-user <username> --sip-pass <password> --name Telnyx-XXXX`
+   (the script reads `LIVEKIT_URL` and the keys from the environment or `.env`: export the `.env.prod` values first so it cannot touch the old project).
+3. Add an entry to `phone_numbers:` with a new `phone_number_id`, the number, a label and the printed `sip_trunk_id`. The test
+   `test_the_configured_calling_numbers_each_have_their_own_trunk` checks that ids, numbers and trunks are unique.
+4. Deploy the API (`git pull`, `docker compose up -d --build posivex_api`); lead-gen lists the new number on its own (its number list reads
+   `GET /v1/convai/phone-numbers`). The agent does not need a redeploy: numbers and trunks are used only by the API.
+5. On the server, `VOICE_PHONE_NUMBER_ID` and `VOICE_PHONE_NUMBER` must not be set in `.env` (the API warns at start if they are).
+6. Place a test call with each new number and check which number shows on the phone. The API log line `Creating SIP participant ... via trunk ST_...`
+   names the trunk used for the call.
+
+Concurrency is shared: the Ship plan's 20 agent sessions and `max_concurrent_calls` count all numbers together, and Telnyx may also cap
+concurrent calls per connection.
 
 ### 7.7 Rolling the agent back (Ship plan and above)
 

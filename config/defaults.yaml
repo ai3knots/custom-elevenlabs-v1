@@ -107,12 +107,27 @@ agents:
     name: "Posivex LiveKit - Michael"
     persona: "michael"
 
-# Calling numbers lead-gen can choose. All of them dial through the one SIP trunk (SIP_OUTBOUND_TRUNK_ID).
-# Env: VOICE_PHONE_NUMBER_ID / VOICE_PHONE_NUMBER replace this list with a single entry.
+# Calling numbers lead-gen can choose. Each Telnyx number has its own SIP connection, so each has its own LiveKit outbound trunk
+# (created with scripts/setup_telnyx_trunk.py in the project named by LIVEKIT_URL). A call leaves through the trunk of the number
+# lead-gen picked; a number with no sip_trunk_id uses the default trunk (SIP_OUTBOUND_TRUNK_ID). To add a number: docs/RUNBOOK.md 7.9.
+# Env: VOICE_PHONE_NUMBER_ID / VOICE_PHONE_NUMBER replace this whole list with a single entry. Leave them unset.
 phone_numbers:
   - phone_number_id: "phnum_posivex_trunk"
-    phone_number: ""
-    label: "Posivex LiveKit number"
+    phone_number: "+14706000407"
+    label: "Posivex 470-600-0407"
+    sip_trunk_id: "ST_dxuzWBcRJC94"
+  - phone_number_id: "phnum_posivex_0298"
+    phone_number: "+14703610298"
+    label: "Posivex 470-361-0298"
+    sip_trunk_id: "ST_dtEZaHJHXPjk"
+  - phone_number_id: "phnum_posivex_0186"
+    phone_number: "+14707630186"
+    label: "Posivex 470-763-0186"
+    sip_trunk_id: "ST_bbrs7okbYU2s"
+  - phone_number_id: "phnum_posivex_7057"
+    phone_number: "+14707427057"
+    label: "Posivex 470-742-7057"
+    sip_trunk_id: "ST_ZhFrYvSfd9po"
 
 # Call recording through LiveKit egress to an S3-compatible bucket. Env: RECORDING_ENABLED, RECORDING_BUCKET,
 # RECORDING_REGION, RECORDING_ENDPOINT, RECORDING_ACCESS_KEY, RECORDING_SECRET, RECORDING_PREFIX.

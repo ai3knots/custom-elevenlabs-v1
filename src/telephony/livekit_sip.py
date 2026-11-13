@@ -34,13 +34,28 @@ class LiveKitSIPProvider(TelephonyProvider):
             )
         return self._lkapi
 
+    def _trunk_for(self, phone_number_id: str | None) -> str | None:
+        """The LiveKit trunk a call leaves through.
+
+        Lead-gen sends the id of the calling number it picked (for example "phnum_posivex_trunk"). That id names an entry in
+        `phone_numbers`, whose `sip_trunk_id` is the trunk of that number's Telnyx connection. An explicit LiveKit trunk id
+        ("ST_...") is used as given. Anything else (no id, an id that is not configured, a number with no trunk) dials through
+        the default trunk, so a call is never refused for a number we do not know; an unknown id is logged.
+        """
+        requested = phone_number_id or ""
+        if requested.startswith("ST_"):
+            return requested
+        entry = self._settings.number_entry(requested)
+        if entry is not None and entry.sip_trunk_id:
+            return entry.sip_trunk_id
+        if requested and entry is None:
+            logger.warning("Calling number id %r is not configured; dialing through the default trunk.", requested)
+        return self._settings.telephony.sip_trunk_id
+
     async def dial(self, request: CallRequest, room_name: str) -> DispatchResult:
         lkapi = self._get_api()
         call_id = require_call_id(request)
-        # Lead-gen sends its own calling-number id (for example "phnum_posivex_trunk"), which is not a LiveKit
-        # trunk id. Only an explicit LiveKit trunk id ("ST_...") overrides the configured trunk.
-        requested = request.phone_number_id if (request.phone_number_id or "").startswith("ST_") else None
-        trunk_id = requested or self._settings.telephony.sip_trunk_id
+        trunk_id = self._trunk_for(request.phone_number_id)
 
         if not trunk_id:
             raise ValueError("No SIP trunk ID configured or provided in call request")

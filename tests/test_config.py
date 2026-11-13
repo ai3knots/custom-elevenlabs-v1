@@ -196,9 +196,20 @@ def test_booleans_accept_true_in_any_case_and_treat_everything_else_as_false(mon
     assert load_settings().recording.enabled is False
 
 
+def test_the_configured_calling_numbers_each_have_their_own_trunk(monkeypatch):
+    """The four Telnyx numbers: unique ids, numbers and LiveKit trunks, in E.164, with the original id kept first."""
+    _clean_env(monkeypatch)
+    numbers = load_settings().phone_numbers
+    assert [n.phone_number_id for n in numbers][0] == "phnum_posivex_trunk"  # campaigns already point at this id
+    assert len(numbers) == 4
+    assert len({n.phone_number_id for n in numbers}) == len({n.phone_number for n in numbers}) == len({n.sip_trunk_id for n in numbers}) == 4
+    for n in numbers:
+        assert n.phone_number.startswith("+1") and len(n.phone_number) == 12 and n.phone_number[1:].isdigit()
+        assert n.sip_trunk_id and n.sip_trunk_id.startswith("ST_")
+
+
 def test_the_calling_number_variables_replace_the_yaml_list(monkeypatch):
     _clean_env(monkeypatch)
-    assert [n.phone_number_id for n in load_settings().phone_numbers] == ["phnum_posivex_trunk"]
     monkeypatch.setenv("VOICE_PHONE_NUMBER", "+14706000407")
     numbers = load_settings().phone_numbers
     assert [(n.phone_number_id, n.phone_number) for n in numbers] == [("phnum_posivex_trunk", "+14706000407")]
