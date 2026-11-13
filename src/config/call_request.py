@@ -19,6 +19,11 @@ class DynamicVariables(BaseModel):
     is_followup: str = "false"
     followup_notes: str = ""
     contact_name: str = ""
+    # A callback somebody agreed to. Lead-gen writes the opening question and the confirmation line (see its lib/callback-context).
+    is_callback: str = "false"
+    opening_question: str = ""
+    callback_confirm_line: str = ""
+    callback_summary: str = ""
 
 
 # `config_overrides` on a call request may only tune the conversation. Anything else (recording credentials, the

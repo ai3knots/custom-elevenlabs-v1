@@ -14,7 +14,7 @@ from src.prompts.kb import KnowledgeBaseProvider
 logger = logging.getLogger("posivex.prompts.manager")
 
 # The scripted opening line, spoken verbatim after pickup.
-FIRST_MESSAGE_TEMPLATE = "Hi, this is {name} from Clover Posivex. Am I speaking with the owner of {business}?"
+FIRST_MESSAGE_TEMPLATE = "Hi, this is {name} from Clover Posivex. {question}"
 
 
 class PromptManager:
@@ -42,15 +42,26 @@ class PromptManager:
     def display_name(self) -> str:
         return "Michael" if self.persona == "michael" else "Amelia"
 
+    @staticmethod
+    def opening_question(variables: DynamicVariables) -> str:
+        """The question that follows the greeting.
+
+        Lead-gen writes it: a callback opens with what was agreed, anything else gets the original question. A caller
+        that sends none (an older client, a manual API call) gets the original question too.
+        """
+        biz_name = variables.business_name or "the business"
+        return (variables.opening_question or "").strip() or f"Am I speaking with the owner of {biz_name}?"
+
     def get_first_message(self, variables: DynamicVariables) -> str:
         """The scripted opening line (English only)."""
-        biz_name = variables.business_name or "the business"
-        return FIRST_MESSAGE_TEMPLATE.format(name=self.display_name, business=biz_name)
+        return FIRST_MESSAGE_TEMPLATE.format(name=self.display_name, question=self.opening_question(variables))
 
     def render_system_prompt(self, variables: DynamicVariables) -> str:
         """Render the persona's system prompt with the dynamic variables."""
         template = self.jinja_env.get_template(f"{self.persona}/system.j2")
-        return template.render(**variables.model_dump())
+        # The prompt quotes the opener the caller already heard, so it must use the same resolved question.
+        context = {**variables.model_dump(), "opening_question": self.opening_question(variables)}
+        return template.render(**context)
 
     def render_prompt(self, variables: DynamicVariables) -> str:
         """Complete instructions for the agent: system prompt followed by the knowledge base."""

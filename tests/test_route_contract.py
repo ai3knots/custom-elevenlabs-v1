@@ -286,6 +286,10 @@ async def test_conversation_detail_shape_for_a_finished_call(env: SimpleNamespac
             "is_followup": "false",
             "followup_notes": "",
             "contact_name": "",
+            "is_callback": "false",
+            "opening_question": "",
+            "callback_confirm_line": "",
+            "callback_summary": "",
         }
     }
     turns = data["transcript"]

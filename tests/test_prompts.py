@@ -138,3 +138,45 @@ def test_missing_knowledge_base_does_not_break_the_prompt(sample_variables: Dyna
     prompt = pm.render_prompt(sample_variables)
     assert "You are Amelia" in prompt
     assert "# Knowledge Base" not in prompt
+
+
+def test_callback_first_message_uses_the_question_lead_gen_wrote():
+    """A callback opens with what was agreed; a blank question falls back to the original opener."""
+    callback = DynamicVariables(
+        business_name="Tony's Pizza & Grill",
+        is_callback="true",
+        opening_question="Someone there asked me to call back around one to speak with Mark. Is Mark available?",
+    )
+    assert PromptManager(persona="amelia").get_first_message(callback) == (
+        "Hi, this is Amelia from Clover Posivex. Someone there asked me to call back around one to speak with Mark. Is Mark available?"
+    )
+    blank = DynamicVariables(business_name="Tony's Pizza & Grill", opening_question="   ")
+    assert PromptManager(persona="michael").get_first_message(blank) == (
+        "Hi, this is Michael from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
+    )
+
+
+def test_prompt_is_statement_first_and_carries_the_callback_line():
+    variables = DynamicVariables(
+        business_name="Tony's Pizza & Grill",
+        is_callback="true",
+        callback_confirm_line="Thanks for taking my call. You asked me to call back at this time. Do you have a couple of minutes?",
+        opening_question="I'm calling back as arranged. Am I speaking with Tony?",
+    )
+    prompt = PromptManager(persona="amelia").render_prompt(variables)
+    assert "Thanks for taking my call. You asked me to call back at this time." in prompt
+    assert "Beat 5, ask for the statement." in prompt
+    assert "Beat 5, ask for the demo" not in prompt
+    assert "suportposivex@gmail.com" in prompt
+    assert "qualify for our wholesale pricing tiers" not in prompt
+    assert "{{" not in prompt
+
+
+def test_prompt_quotes_the_same_opener_that_is_spoken_when_no_question_is_sent():
+    """A blank question must not leave the prompt claiming the opener ended after "Clover Posivex."."""
+    variables = DynamicVariables(business_name="Tony's Pizza & Grill")
+    for persona in ("amelia", "michael"):
+        manager = PromptManager(persona=persona)
+        spoken = manager.get_first_message(variables)
+        assert spoken.endswith("Am I speaking with the owner of Tony's Pizza & Grill?")
+        assert f'"{spoken}"' in manager.render_system_prompt(variables)
