@@ -14,10 +14,10 @@ from src.db.base import Base
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Interpret the config file for Python logging. Existing loggers stay enabled: by default fileConfig silences every
+# logger created before it runs, which would mute the application's own logs when migrations run in the same process.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

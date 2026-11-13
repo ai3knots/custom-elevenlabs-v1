@@ -170,6 +170,8 @@ def test_every_environment_rule_lands_where_it_says(monkeypatch):
             sample = "mock"
         if rule.env == "LOG_LEVEL":
             sample = "DEBUG"
+        if rule.env == "NOISE_CANCELLATION":
+            sample = "none"
         monkeypatch.setenv(rule.env, sample)
         found = _lookup(load_settings(), rule.path)
         assert found == (True if rule.boolean else sample), rule.env

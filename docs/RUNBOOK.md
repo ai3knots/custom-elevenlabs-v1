@@ -110,7 +110,8 @@ Copy `.env.example` to `.env` and configure credentials:
 | `WEBHOOK__WEBHOOK_SECRET` | Shared secret for HMAC-SHA256 signing | `posivex_secret_123` |
 | `TELEPHONY__PROVIDER` | Provider mode (`livekit_sip`, `mock`, `console`) | `livekit_sip` |
 | `TELEPHONY__SIP_TRUNK_ID` | Default outbound SIP Trunk ID | `ST_xxxxxxxxx` |
-| `TELEPHONY__MAX_CONCURRENT_CALLS` | Global concurrency ceiling | `50` |
+| `TELEPHONY__MAX_CONCURRENT_CALLS` | Global concurrency ceiling. Matches the Ship plan's 20 concurrent agent sessions; raise it only with the plan | `20` |
+| `NOISE_CANCELLATION` | Background-noise cancellation on the callee's audio: `krisp_nc` (LiveKit Cloud, no extra charge) or `none`. Sent to the Cloud agent by `deploy_agent.py`, so changing it needs a redeploy | `krisp_nc` |
 | `TURN_DETECTOR_MODE` | End-of-turn strategy: `vad`, `stt-only`, `v1`, `v1-mini` (LiveKit audio turn detector) | `vad` |
 | `LLM_DEFAULT_MODEL` / `LLM_FALLBACK_MODEL` | Override the Gemini models without a rebuild. The fallback must differ from the default. The default also runs the post-call outcome classifier. | `gemini-3.5-flash` / `gemini-3.5-flash-lite` |
 
@@ -344,8 +345,46 @@ over HTTPS (7.3), so it never needs the database.
 4. **No worker on the server.** The compose file no longer has an agent service, so nothing on your server can take a call. If an old
    `posivex_agent` container from an earlier compose file still exists there, remove it (it would register under the same
    name as the Cloud agent): `docker compose up -d --build --remove-orphans posivex_api`, or `docker rm -f posivex_agent`.
-   To roll the agent back, use `lk agent rollback`.
+   To roll the agent back, see 7.7.
 5. **Watch it:** `lk agent logs`, `lk agent status`. Calls still finish through the API's outbox to lead-gen.
+
+### 7.7 Rolling the agent back (Ship plan and above)
+
+A deploy that goes wrong is undone without rebuilding. Always name the project: the CLI's default may be the old one.
+
+```
+lk agent versions --project posivex-new                 # the list; the current one is marked
+lk agent rollback --project posivex-new                 # back to the version before the current one
+lk agent rollback --project posivex-new --version <id>  # or to a specific version
+lk agent status --project posivex-new                   # wait until the rolled-back version is running
+```
+
+The rollout is rolling: new calls go to the restored version once it is healthy, and calls already running on the bad version
+are allowed to finish (up to an hour). Rolling back the agent does not touch the API; if the API was deployed in the same
+change, roll that back with git (`git checkout <good commit>` then `docker compose up -d --build posivex_api`).
+On the Build plan there is no `rollback`: revert the code and run `deploy_agent.py` again.
+
+### 7.8 Plan limits and noise cancellation
+
+**Limits (Ship plan, from LiveKit's pricing page).** 20 concurrent agent sessions, 5,000 agent-session minutes a month included
+(then $0.01 per minute), 5,000 third-party SIP minutes (then $0.004 per minute), 5,000 recording minutes. `telephony.max_concurrent_calls`
+is 20 to match, so the API refuses call 21 itself. Raise the two together (here and in the plan) and never one alone.
+Lead-gen's campaign concurrency should climb in steps (5, then 10, then 20), watching for failed dials.
+
+**Check once in the LiveKit dashboard** (Settings, usage and limits): the **concurrent egress** limit. Every call starts an audio recording
+through egress, and the Build plan allowed only 2 at once. LiveKit's documentation does not list Ship's egress limit, so read it there.
+If it is lower than 20, calls past that number run without a recording (the call itself is unaffected; the agent logs
+"Could not start the recording for call ..."). Ask LiveKit support to raise it, or keep campaign concurrency at or below it.
+
+**Noise cancellation.** `conversation.noise_cancellation` (`NOISE_CANCELLATION`) is `krisp_nc` by default: Krisp's background-noise model on the
+callee's audio before speech-to-text, the voice detector and the turn detector. LiveKit Cloud includes it at no extra charge (the
+voice-isolation models, including the telephony one, are metered). It does not change the recording. Each call logs
+`Noise cancellation: krisp_nc` (or `off`) and the `session_init` event carries `noise_cancellation: true|false`.
+A plugin that cannot load never fails a call: the agent logs a warning and carries on with the raw audio.
+Noise cancellation can occasionally make speech-to-text *worse*, so compare it on real calls: change the setting to `none` in `.env.prod`,
+run `uv run python scripts/deploy_agent.py` (the script resends the agent's whole environment), place the same test calls, and compare the
+transcripts and any "interrupted" or missed words. Turn it back on the same way. A single API-placed call can also be switched off with
+`config_overrides: {"conversation": {"noise_cancellation": "none"}}`.
 
 On the Build plan the agent scales to zero when idle, so the first call after a quiet period waits roughly 10 to 20 seconds
 for a cold start (callee answers before the worker has joined). The Ship plan keeps it warm.

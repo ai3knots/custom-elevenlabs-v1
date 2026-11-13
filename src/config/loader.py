@@ -64,6 +64,7 @@ ENV_RULES: tuple[EnvRule, ...] = (
     EnvRule("LLM_DEFAULT_MODEL", ("llm", "default_model")),
     EnvRule("LLM_FALLBACK_MODEL", ("llm", "fallback_model")),
     EnvRule("TURN_DETECTOR_MODE", ("turn_detector", "mode")),  # vad | stt-only | v1 | v1-mini
+    EnvRule("NOISE_CANCELLATION", ("conversation", "noise_cancellation")),  # krisp_nc | none
     # Telephony
     EnvRule("TELEPHONY_PROVIDER", ("telephony", "provider")),
     EnvRule("SIP_OUTBOUND_TRUNK_ID", ("telephony", "sip_trunk_id")),

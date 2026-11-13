@@ -1557,6 +1557,21 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-noise-cancellation"
+version = "0.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/04/07bae58d18b065a3c487d2d201ca8ec56b08bed6ab26e544cbebd5447409/livekit_plugins_noise_cancellation-0.3.3-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:668556be7c8a781facf1d0e04008408598aea454f899053588a714f7de9155b0", size = 66623987, upload-time = "2026-11-06T14:38:31.341Z" },
+    { url = "https://files.pythonhosted.org/packages/09/2f/5b8a5982a2900ae300f944683f0d754fd96324de0258b132c5fab2d8347d/livekit_plugins_noise_cancellation-0.3.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:107b506a762875c090d9c04c0631742add52b9ba61cefb035f541e48e5a0b754", size = 65126442, upload-time = "2026-11-06T14:38:36.382Z" },
+    { url = "https://files.pythonhosted.org/packages/11/94/9d9dd25bec9f0f300125fd7fa9a96a585271d7b2fe5bab5592fdf8a1418a/livekit_plugins_noise_cancellation-0.3.3-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:a0bb59c7d5061e487a9c4d90f25d8ca3e0cc228d9b598fe0f1af1b25c1f5a38b", size = 70828028, upload-time = "2026-11-06T14:38:41.689Z" },
+    { url = "https://files.pythonhosted.org/packages/50/3f/f8a0c20a88afedb4072f28bf2c4d7b9ea452e56facba840bfef64535e194/livekit_plugins_noise_cancellation-0.3.3-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:57d175a38ff726638e66a9aa50a2a9712773667a3da556fbdd46bc20ff85fbdc", size = 73609094, upload-time = "2026-11-06T14:38:47.566Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/7c/4104604b1f47720019199a4db434f02c81fe4bb675231aef7aa92e459dee/livekit_plugins_noise_cancellation-0.3.3-py3-none-win_amd64.whl", hash = "sha256:6ddd6f7fb255db0b02309e50e6a193d0ae57dd5624e1045b3e00e9dddec71d33", size = 66307824, upload-time = "2026-11-06T14:38:53.316Z" },
+]
+
+[[package]]
 name = "livekit-plugins-silero"
 version = "1.8.10"
 source = { registry = "https://pypi.org/simple" }
@@ -2195,6 +2210,7 @@ dependencies = [
     { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-elevenlabs" },
     { name = "livekit-plugins-google" },
+    { name = "livekit-plugins-noise-cancellation" },
     { name = "livekit-plugins-silero" },
     { name = "prometheus-client" },
     { name = "pydantic" },
@@ -2229,6 +2245,7 @@ requires-dist = [
     { name = "livekit-plugins-deepgram", specifier = "==1.8.10" },
     { name = "livekit-plugins-elevenlabs", specifier = "==1.8.10" },
     { name = "livekit-plugins-google", specifier = "==1.8.10" },
+    { name = "livekit-plugins-noise-cancellation", specifier = "==0.3.3" },
     { name = "livekit-plugins-silero", specifier = "==1.8.10" },
     { name = "prometheus-client", specifier = ">=0.26.0" },
     { name = "pydantic", specifier = ">=2.10.0" },

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from livekit.agents import room_io
 
 from src.agent import session_handler
 from src.agent.greeting_detector import GreetingVerdict
@@ -544,3 +545,18 @@ async def test_no_speech_watchdog_ends_a_call_that_stays_wordless(make_harness: 
 def test_the_events_the_flow_stores_are_json_serialisable() -> None:
     """The remote recorder posts events as JSON; every payload the flow builds must survive that."""
     json.dumps({"since_pickup_secs": 1.5, "ring_secs": 4.2, "sip": True, "category": "human"})
+
+
+async def test_a_call_starts_with_noise_cancellation_and_reports_it(make_harness: Callable[..., Harness]) -> None:
+    harness = make_harness(callee=browser_callee(), settings=make_settings())
+    await harness.run()
+    options = harness.session.room_options
+    assert isinstance(options.audio_input, room_io.AudioInputOptions)
+    assert harness.ctx.local.published[0]["noise_cancellation"] is True
+
+
+async def test_a_call_starts_without_noise_cancellation_when_switched_off(make_harness: Callable[..., Harness]) -> None:
+    harness = make_harness(callee=browser_callee(), settings=make_settings(noise_cancellation="none"))
+    await harness.run()
+    assert harness.session.room_options == room_io.RoomOptions(delete_room_on_close=True)
+    assert harness.ctx.local.published[0]["noise_cancellation"] is False

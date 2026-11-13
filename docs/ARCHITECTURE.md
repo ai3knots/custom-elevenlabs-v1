@@ -434,7 +434,7 @@ Defaults live in `config/defaults.yaml` (and the schemas in `src/config/models.p
 
 | Area | Setting | Default |
 |---|---|---|
-| Calls | `telephony.max_concurrent_calls` | 50 (API-side limit) |
+| Calls | `telephony.max_concurrent_calls` | 20 (API-side limit; the Ship plan allows 20 concurrent agent sessions) |
 | Call length | `conversation.max_duration_seconds` | 900 |
 | Ringing | `conversation.ring_timeout_seconds` | 75 |
 | Start of call | `opener_delay_seconds` / `opener_quiet_wait_seconds` | 1.0 / 1.0 |
@@ -478,6 +478,7 @@ Defaults live in `config/defaults.yaml` (and the schemas in `src/config/models.p
 | `src/api/` | FastAPI app factory (`create_app`, nothing is built at import), dependencies (auth), routes (`convai_emulation`, `convai_read`, `internal`, `health`) and `services/dispatch.py` (the dial flow behind the dial route) |
 | `src/agent/session_handler.py` | The LiveKit entrypoint: reads the dispatch, builds the providers, hands the call to `CallSession`; worker prewarm and the server factory |
 | `src/agent/call_session/` | One call, a piece per concern: `session.py` (wires and runs them), `lifecycle.py` (first end reason wins, goodbye rescue, time cap), `silence_control.py` (the nudge, the watchdog), `greeting_check.py`, `opening.py` (the opener and overlap), `finalizer.py` (outcome, cost, report), `timeline.py`, `transcript.py`, `waits.py`, `telemetry.py` |
+| `src/agent/room_options.py` | The room options of a call: hang up on close, and Krisp NC noise cancellation on the callee's audio (`conversation.noise_cancellation`; a plugin that fails to load never fails the call) |
 | `src/agent/persona_agent.py` | The agent class, its three tools and the call state |
 | `src/agent/greeting_detector.py` | The voicemail and phone-menu check |
 | `src/agent/opener.py`, `silence.py`, `call_clock.py` | Overlap replies, the nudge and watchdog, the pickup clock |

@@ -92,6 +92,9 @@ class ConversationConfig(BaseModel):
     machine_detection_window_seconds: float = 25.0
     machine_detection_confidence: float = 0.8
     max_user_speech_seconds: float = 8.0
+    # Cleans background noise out of the callee's audio before speech-to-text and turn detection. "krisp_nc" is the
+    # background-noise model LiveKit Cloud includes at no charge; "none" turns it off (a call can then be compared).
+    noise_cancellation: Literal["krisp_nc", "none"] = "krisp_nc"
     interruption_ignore_terms: list[str] = Field(
         default_factory=lambda: [
             "mmhmm",
@@ -142,7 +145,7 @@ class TelephonyConfig(BaseModel):
 
     provider: Literal["livekit_sip", "mock", "console"] = "livekit_sip"
     sip_trunk_id: str | None = None
-    max_concurrent_calls: int = 50
+    max_concurrent_calls: int = 20
 
 
 class AgentEntry(BaseModel):

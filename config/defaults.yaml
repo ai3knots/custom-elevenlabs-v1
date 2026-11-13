@@ -57,6 +57,7 @@ conversation:
   machine_detection_window_seconds: 25.0 # stop checking this long after pickup
   machine_detection_confidence: 0.8 # hang up on a machine only at or above this confidence
   max_user_speech_seconds: 8.0 # force an answer when one uninterrupted caller turn runs this long (0 disables)
+  noise_cancellation: "krisp_nc" # Krisp NC on the callee's audio (free on LiveKit Cloud); "none" turns it off
   interruption_min_words: 1
   interruption_ignore_terms:
     - "mmhmm"
@@ -123,5 +124,5 @@ recording:
 telephony:
   provider: "livekit_sip" # mock and console exist for tests and dry runs; set TELEPHONY_PROVIDER to use them
   sip_trunk_id: null
-  max_concurrent_calls: 50
+  max_concurrent_calls: 20
 

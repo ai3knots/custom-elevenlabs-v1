@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from livekit import rtc
-from livekit.agents import room_io
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from src.agent.call_session.finalizer import CallFinalizer, OutcomeClassifier, PhoneLeg
@@ -28,6 +27,7 @@ from src.agent.call_session.timeline import CallTimeline
 from src.agent.call_session.transcript import TranscriptBuffer
 from src.agent.call_session.waits import wait_for_answer
 from src.agent.persona_agent import CallState, PersonaAgent
+from src.agent.room_options import build_room_options
 from src.analysis import CallSignals
 from src.config import CallRequest, Settings
 from src.telephony.recording import start_call_recording
@@ -150,14 +150,16 @@ class CallSession:
         ctx.add_shutdown_callback(self._on_shutdown)
         lifecycle.start_duration_guard()
 
-        # Deleting the room on close hangs up the SIP leg; otherwise the callee is left on a silent line.
-        await session.start(agent=self.agent, room=ctx.room, room_options=room_io.RoomOptions(delete_room_on_close=True))
+        room_options, noise_cancellation_on = build_room_options(self._settings.conversation.noise_cancellation)
+        logger.info("Noise cancellation: %s", self._settings.conversation.noise_cancellation if noise_cancellation_on else "off")
+        await session.start(agent=self.agent, room=ctx.room, room_options=room_options)
         await self._telemetry.publish(
             "session_init",
             {
                 "call_id": self._timeline.call_id,
                 "persona": self._call_request.persona,
                 "active_model": self._settings.llm.default_model,
+                "noise_cancellation": noise_cancellation_on,
                 "dynamic_variables": self._call_request.dynamic_variables.model_dump(),
             },
         )
