@@ -379,8 +379,11 @@ concurrent calls per connection.
 
 ### 7.10 Live transfer to the team line
 
-When the owner (or the person who decides) asks to talk to a person, the agent calls its `transfer_call` tool: it says one line ("One moment while I
-connect you with our team"), tells lead-gen's team-briefing webhook who is coming, then asks LiveKit to transfer the caller to the team line,
+The agent calls its `transfer_call` tool when the owner (or the person who decides) asks to talk to a person or says they want the demo right now,
+when they answer its offer of the quick demo with a clear yes to doing it now, or when anyone says yes to the offer in its AI answer ("I can connect
+you with our team right now if you want"). A yes to the demo *later*, or "I can't right now", is not a transfer: it books the demo as before. The tool says one line
+("Let me connect you with someone from our team right now", or for the demo "Perfect, let me connect you with our team now. They'll show you the devices
+and features live"), tells lead-gen's team-briefing webhook who is coming, then asks LiveKit to transfer the caller to the team line,
 (229) 202-8500, with a SIP REFER (a *cold* transfer, [LiveKit docs](https://docs.livekit.io/telephony/features/transfers/cold/)). When the team line
 answers, LiveKit leaves the call and the caller stays connected to the team through Telnyx. When it does not (no answer within 30 s, busy,
 declined), the caller is still with the agent, who offers the team line or a callback. At most two attempts per call.

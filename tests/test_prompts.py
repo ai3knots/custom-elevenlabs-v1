@@ -195,8 +195,9 @@ def test_the_prompt_promises_no_transfer_unless_the_agent_has_the_transfer_tool(
     on = manager.render_system_prompt(variables, transfer_enabled=True)
     assert "You cannot transfer or connect a call." not in on
     assert "transfer_call" in on and "{%" not in on
-    assert "only when the owner or the person who makes the decision asks to talk to a person" in on
-    assert "never transfer staff, a machine or a menu" in on
+    assert "when the owner or the person who makes the decision asks to talk to a person or wants the demo right now" in on
+    assert "never transfer a machine or a menu" in on
+    assert "Apart from that AI answer, never offer a transfer yourself" in on
     assert "two two nine, two zero two, eight five zero zero" in on  # the team line stays the fallback
     # The personas are kept in step: the same transfer wording in both.
     other = "michael" if persona == "amelia" else "amelia"
@@ -221,6 +222,42 @@ def test_the_transfer_rules_carry_the_trigger_and_the_exclusions_of_the_live_ele
         "press two",  # a menu offering a representative is a machine, not the prospect
         "Do not speak before the tool",  # the tool says the hand-over line itself
         "never try to end the call; the transfer ends it",
-        "If staff ask for a person, give the team line instead",
+        "If staff ask for a person on their own, give the team line instead",
     ):
         assert phrase in on, phrase
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_the_demo_right_now_is_a_transfer_and_a_yes_for_later_is_not(persona: str) -> None:
+    """The live ElevenLabs agent connects a clear yes to the demo now; 'I can't right now' and 'later' are not a yes."""
+    variables = DynamicVariables(business_name="Tony's Pizza & Grill")
+    manager = PromptManager(persona=persona)  # type: ignore[arg-type]
+    on = manager.render_system_prompt(variables, transfer_enabled=True)
+    for phrase in (
+        "can we do the demo now?",  # asking for it is a trigger
+        "Pass demo as true",
+        "I have time, now is fine, put me through",  # what a yes sounds like
+        'is NOT a yes, even when the words "right now" appear',
+        "\"I can't right now\" and \"not right now\" are refusals",
+        "A yes counts only as the answer to that offer",
+        "A clear yes to doing it now, or if they ask for it right now: use the transfer_call tool with demo true",
+        "A yes to doing it later, or a time they name: continue with the live demo details below",
+    ):
+        assert phrase in on, phrase
+    assert "Our Consultant isn't on this line" not in on  # no 'call you later' answer to a demo-now request
+
+    off = manager.render_system_prompt(variables)
+    assert "Our Consultant isn't on this line" in off and "demo true" not in off  # transfers off: as before
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_the_ai_answer_offers_to_connect_the_caller_when_transfers_are_on(persona: str) -> None:
+    variables = DynamicVariables(business_name="Tony's Pizza & Grill")
+    manager = PromptManager(persona=persona)  # type: ignore[arg-type]
+    on = manager.render_system_prompt(variables, transfer_enabled=True)
+    assert "I can connect you with our team right now if you want." in on
+    assert "if they say yes, or ask for a person, use the transfer_call tool, whoever they are" in on
+    off = manager.render_system_prompt(variables)
+    assert "I can connect you with our team right now" not in off  # off: the team line or a callback, as before
+    assert "our team line is two two nine, two zero two, eight five zero zero, or I can have them call you" in off
+

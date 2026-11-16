@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger("posivex.session")
 
 HANDOVER_LINE = "Of course. Let me connect you with someone from our team right now."
+# Said instead when the owner said yes to the demo now (the live ElevenLabs agent's line for that).
+DEMO_HANDOVER_LINE = "Perfect, let me connect you with our team now. They'll show you the devices and features live."
 # While the team line rings the call is on hold: the silence timers must not end it.
 HOLD_MARGIN_SECS = 15.0
 MAX_BRIEF_CHARS = 3000
@@ -50,6 +52,7 @@ class TransferBrief:
     prospect_name: str = ""
     prospect_email: str = ""
     callback_number: str = ""
+    demo: bool = False  # connected because they want the demo now, not only to talk to a person
 
 
 class TransferFailed(Exception):
@@ -162,7 +165,7 @@ class CallTransferrer:
         state = self._state
         briefing = asyncio.ensure_future(self._send_briefing(brief))
         try:
-            handle = session.say(HANDOVER_LINE, allow_interruptions=False)
+            handle = session.say(DEMO_HANDOVER_LINE if brief.demo else HANDOVER_LINE, allow_interruptions=False)
             await handle.wait_for_playout()
             await self._refer()
         except Exception as error:
@@ -178,6 +181,7 @@ class CallTransferrer:
                     "result": f"Transfer failed: {FAILURE_MESSAGES.get(failed.kind, failed.kind)}",
                     "error": True,
                     "attempt": self._attempts,
+                    "demo": brief.demo,
                 },
             )
             await briefing
@@ -188,7 +192,7 @@ class CallTransferrer:
         logger.info("Call transferred to the team line.")
         await self._emit(
             "call_transferred",
-            {"reason": "transferred", "result": "Call was transferred to number", "attempt": self._attempts},
+            {"reason": "transferred", "result": "Call was transferred to number", "attempt": self._attempts, "demo": brief.demo},
         )
         await briefing
         self._end_call("transferred", False)
@@ -259,14 +263,16 @@ def build_transfer_tool(transferrer: CallTransferrer) -> Any:
         prospect_name: str = "",
         prospect_email: str = "",
         callback_number: str = "",
+        demo: bool = False,
     ) -> None:
-        """Connect the caller to our team on a live phone line. Use it only when the owner or the person who makes the decision asks to talk to a person. Do not speak before it: the tool says the hand-over line itself. Never use it for staff, a machine or a menu, and never to offer a transfer on your own. It also emails our sales team a briefing about this prospect while the call is being connected; never mention that to the prospect. If it fails you are told why and the call goes on.
+        """Connect the caller to our team on a live phone line. Use it only when the owner or the person who makes the decision asks to talk to a person or wants the demo right now, or when someone says yes to your offer in the AI answer. Do not speak before it: the tool says the hand-over line itself. Never use it for a machine or a menu, and never to offer a transfer on your own apart from that AI answer. It also emails our sales team a briefing about this prospect while the call is being connected; never mention that to the prospect. If it fails you are told why and the call goes on.
 
         Args:
             summary: Three to six plain sentences for the sales team, using only what was said on this call: what the prospect uses today for card payments, what they said or asked (prices, objections, interest), what they agreed to, and anything the team should know before talking to them. Never invent details.
             prospect_name: The prospect's name if they said it, otherwise empty
             prospect_email: Their email if they gave it, otherwise empty
             callback_number: A number to reach them if they gave one, otherwise empty
+            demo: True when they are being connected because they said yes to the demo now or asked for it right now, otherwise false
         """
         await transferrer.transfer(
             context,
@@ -275,6 +281,7 @@ def build_transfer_tool(transferrer: CallTransferrer) -> Any:
                 prospect_name=prospect_name or "",
                 prospect_email=prospect_email or "",
                 callback_number=callback_number or "",
+                demo=bool(demo),
             ),
         )
 

@@ -107,13 +107,14 @@ def make_transfer_agent(
     return agent, state
 
 
-def test_the_model_sees_transfer_call_with_four_optional_arguments_and_no_context(ended: list[tuple[str, bool]]) -> None:
+def test_the_model_sees_transfer_call_with_five_optional_arguments_and_no_context(ended: list[tuple[str, bool]]) -> None:
     agent, _ = make_transfer_agent(ended, FakeLiveKitApi())
     schemas = {s["function"]["name"]: s["function"] for s in ToolContext(agent.tools).parse_function_tools("openai")}
     assert sorted(schemas) == ["end_call", "skip_turn", "transfer_call", "voicemail_detection"]
     properties = schemas["transfer_call"]["parameters"]["properties"]
-    assert sorted(properties) == ["callback_number", "prospect_email", "prospect_name", "summary"]  # the RunContext is injected
-    assert "only when the owner or the person who makes the decision asks to talk to a person" in schemas["transfer_call"]["description"]
+    assert sorted(properties) == ["callback_number", "demo", "prospect_email", "prospect_name", "summary"]  # RunContext is injected
+    assert properties["demo"]["type"] == ["boolean", "null"]
+    assert "asks to talk to a person or wants the demo right now" in schemas["transfer_call"]["description"]
     assert "never mention that to the prospect" in schemas["transfer_call"]["description"]
     assert properties["summary"]["description"].startswith("Three to six plain sentences for the sales team")
     assert "Never invent details" in properties["summary"]["description"]

@@ -103,6 +103,19 @@ async def test_a_connected_transfer_refers_the_caller_to_the_team_line_and_ends_
     assert rig.ended == [("transferred", False)]
 
 
+async def test_a_demo_now_transfer_says_the_demo_line_and_a_person_request_says_the_person_line() -> None:
+    demo = Rig(None)
+    await demo.transfer(summary="Said yes to the demo now.", demo=True)  # type: ignore[arg-type]
+    assert demo.said == [transfer_module.DEMO_HANDOVER_LINE]
+    assert demo.events[0][1]["demo"] is True
+
+    person = Rig(None)
+    await person.transfer(summary="Asked for a human.")
+    assert person.said == [transfer_module.HANDOVER_LINE]
+    assert person.events[0][1]["demo"] is False
+    assert transfer_module.DEMO_HANDOVER_LINE != transfer_module.HANDOVER_LINE
+
+
 async def test_the_team_is_briefed_before_the_caller_is_connected(briefings: list[httpx.Request]) -> None:
     rig = Rig(None)
     await rig.transfer(
