@@ -28,6 +28,7 @@ from src.agent.call_session.transcript import TranscriptBuffer
 from src.agent.call_session.waits import wait_for_answer
 from src.agent.persona_agent import CallState, PersonaAgent
 from src.agent.room_options import build_room_options
+from src.agent.transfer import CallTransferrer, build_transfer_tool
 from src.analysis import CallSignals
 from src.config import CallRequest, Settings
 from src.telephony.recording import start_call_recording
@@ -92,6 +93,21 @@ class CallSession:
             tasks=self._tasks,
             config=config,
         )
+        # A live transfer to the team line exists only when it is switched on; the tool is then added to this call's agent.
+        self._callee_identity: str | None = None
+        self._transfer: CallTransferrer | None = None
+        if settings.transfer.enabled:
+            self._transfer = CallTransferrer(
+                ctx=ctx,
+                call_request=call_request,
+                config=settings.transfer,
+                call_state=self.call_state,
+                is_phone_call=lambda: self._leg.sip and self._leg.answered,
+                callee_identity=lambda: self._callee_identity,
+                call_ending=lambda: bool(self.lifecycle.reason),
+                end_call=lambda reason, drain: self.lifecycle.end(reason, drain=drain),
+                emit=self._on_agent_event,
+            )
         # The agent id lead-gen dialed with (or the persona's own) is echoed back in the post-call webhook.
         agent_entry = settings.agent_for_id(call_request.agent_id) or settings.agent_for_persona(call_request.persona)
         self.agent = PersonaAgent(
@@ -105,6 +121,7 @@ class CallSession:
             # The LLM stays quiet until the scripted opening line is spoken (see OpenerFlow).
             hold_replies=True,
             on_gated_turn=self.transcript.add_held_turn,
+            extra_tools=[build_transfer_tool(self._transfer)] if self._transfer else [],
         )
         self.opener = OpenerFlow(
             session=session,
@@ -139,6 +156,7 @@ class CallSession:
             agent_id=call_request.agent_id or agent_entry.agent_id,
             agent_name=agent_entry.name,
             classify_outcome=classify_outcome,
+            transfer=self._transfer,
         )
         self._first_speech_marked = False
 
@@ -183,6 +201,7 @@ class CallSession:
 
     async def _wait_for_pickup(self, callee: Any) -> bool:
         """For a phone call, wait until it is answered. False when it was not (the call has been ended)."""
+        self._callee_identity = callee.identity
         is_sip = callee.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP or callee.identity.startswith("phone_")
         self._leg.sip = is_sip
         if not is_sip:

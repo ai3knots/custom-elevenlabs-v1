@@ -291,7 +291,9 @@ async def run_agent_session(
     )
 
     prompt_manager = PromptManager(persona=call_request.persona, kb_config=resolved_settings.kb)
-    instructions = await asyncio.to_thread(prompt_manager.render_prompt, call_request.dynamic_variables)
+    instructions = await asyncio.to_thread(
+        prompt_manager.render_prompt, call_request.dynamic_variables, transfer_enabled=resolved_settings.transfer.enabled
+    )
     session = await _build_session(ctx, resolved_settings)
 
     # The fast Gemini check that hangs up on voicemails and phone menus needs a key.

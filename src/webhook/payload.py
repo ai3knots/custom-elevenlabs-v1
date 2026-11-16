@@ -20,6 +20,9 @@ TOOL_EVENTS = {
     "end_call": "end_call",
     "voicemail_detected": "voicemail_detection",
     "hold_requested": "skip_turn",
+    # A live transfer to our team, under the name lead-gen already recognises (its `isTransferTool` matches `transfer_to_*`).
+    "call_transferred": "transfer_to_number",
+    "transfer_failed": "transfer_to_number",
 }
 
 SUCCESS_OUTCOMES = frozenset(
@@ -73,7 +76,12 @@ def _tool_turns(call: Call, events: Sequence[CallEvent]) -> list[dict[str, Any]]
                     }
                 ],
                 "tool_results": [
-                    {"request_id": request_id, "tool_name": tool, "result_value": "", "is_error": False}
+                    {
+                        "request_id": request_id,
+                        "tool_name": tool,
+                        "result_value": str((ev.payload or {}).get("result", "")),
+                        "is_error": bool((ev.payload or {}).get("error", False)),
+                    }
                 ],
             }
         )

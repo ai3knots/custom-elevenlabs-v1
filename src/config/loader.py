@@ -65,6 +65,11 @@ ENV_RULES: tuple[EnvRule, ...] = (
     EnvRule("LLM_FALLBACK_MODEL", ("llm", "fallback_model")),
     EnvRule("TURN_DETECTOR_MODE", ("turn_detector", "mode")),  # vad | stt-only | v1 | v1-mini
     EnvRule("NOISE_CANCELLATION", ("conversation", "noise_cancellation")),  # krisp_nc | none
+    # Live transfer to the team line
+    EnvRule("TRANSFER_ENABLED", ("transfer", "enabled"), boolean=True),
+    EnvRule("TRANSFER_TO", ("transfer", "destination")),
+    EnvRule("TEAM_BRIEFING_URL", ("transfer", "briefing_url")),
+    EnvRule("TEAM_BRIEFING_SECRET", ("transfer", "briefing_secret")),
     # Telephony
     EnvRule("TELEPHONY_PROVIDER", ("telephony", "provider")),
     EnvRule("SIP_OUTBOUND_TRUNK_ID", ("telephony", "sip_trunk_id")),

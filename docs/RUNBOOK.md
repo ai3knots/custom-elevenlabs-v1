@@ -377,6 +377,64 @@ number picked; no id, an id that is not listed, or an entry with no `sip_trunk_i
 Concurrency is shared: the Ship plan's 20 agent sessions and `max_concurrent_calls` count all numbers together, and Telnyx may also cap
 concurrent calls per connection.
 
+### 7.10 Live transfer to the team line
+
+When the owner (or the person who decides) asks to talk to a person, the agent calls its `transfer_call` tool: it says one line ("One moment while I
+connect you with our team"), tells lead-gen's team-briefing webhook who is coming, then asks LiveKit to transfer the caller to the team line,
+(229) 202-8500, with a SIP REFER (a *cold* transfer, [LiveKit docs](https://docs.livekit.io/telephony/features/transfers/cold/)). When the team line
+answers, LiveKit leaves the call and the caller stays connected to the team through Telnyx. When it does not (no answer within 30 s, busy,
+declined), the caller is still with the agent, who offers the team line or a callback. At most two attempts per call.
+It is **off by default** (`transfer.enabled: false`) and changes nothing until you switch it on.
+
+**What the call looks like to lead-gen (no lead-gen change):** the post-call data has a tool call named `transfer_to_number` (lead-gen's
+`isTransferTool` matches `transfer_to_*`) with the result text `Call was transferred to number` (or `Transfer failed: ...`), the termination
+reason is `transferred`, and the outcome is `consultant_call_scheduled`. A transfer that did not connect keeps the call's normal ending.
+The recording stops at the hand-over (LiveKit has no visibility after it).
+
+**1. Telnyx: what has to be in place first (you do this; I cannot).** LiveKit's documentation says two things about Telnyx
+([troubleshooting](https://docs.livekit.io/reference/telephony/troubleshooting/), [call forwarding](https://docs.livekit.io/telephony/features/transfers/cold/)):
+SIP REFER must be enabled on the Telnyx account, and the connection has a **Confirm blind transfer** setting under *Connection settings,
+Advanced* that makes Telnyx report whether the transfer was answered. Telnyx's own pages that I could read do not describe REFER for calls placed
+*out* through a SIP connection, so treat the steps below as the route to follow and **the test in step 2 as the proof.**
+1. Open a ticket with Telnyx support (portal, Help Center, or the chat): *"Please enable SIP REFER (blind transfer) for outbound calls on my account and on SIP
+   connections 3075776859561002326, 3065517092007576683, 3075661831755269391 and 3069924608829294174. We transfer answered outbound calls to +12292028500
+   from LiveKit Cloud with a SIP REFER and need Telnyx to complete it and report the result."*
+2. In the Mission Control portal: *Voice, SIP Trunking*, open each of the four connections with the edit icon, find **Advanced** settings, and turn on
+   **Confirm blind transfer** (Telnyx's article "Configure blind transfer confirmation" explains it). If you cannot see it, say so in the same ticket.
+3. Check each connection's *Outbound* tab: its outbound voice profile must allow calls to the United States.
+
+**2. Prove it works, with no code and no agent** (about 5 minutes per trunk). This places a real call from a trunk to your own phone, then transfers it
+to the team line. Use your own mobile, and warn whoever answers the team line that it is a test:
+```
+lk sip participant create --project posivex-new --trunk <ST_...> --call +1<your mobile> --room reftest --identity tester --wait
+# answer your phone, then:
+lk sip participant transfer --project posivex-new --room reftest --identity tester --to tel:+12292028500
+lk room delete --project posivex-new reftest     # only if the room is still there afterwards
+```
+Pass when: the team line rings and, once answered, you hear the team on your mobile, and the command returns without an error. Look at the caller ID the
+team sees (note it down; it is decided by Telnyx). Repeat with each of the four trunks (`lk sip outbound list --project posivex-new` lists them; the
+table in 7.6a says which is which). An error `STR_REJECTED` with a 403 means Telnyx refused the transfer (REFER or the voice profile),
+`STR_RINGING_TIMEOUT` or a 408 means nobody answered, `STR_CALL_ENDED` about 16 s in means the media timeout ended the call (the agent already sets a longer one).
+
+**3. Switch it on** (only after step 2 passed on all four trunks). The API and the agent must both know:
+- **Server `.env`** (the API lengthens the media timeout of every call it dials): `TRANSFER_ENABLED=true`. Then `git pull` and `docker compose up -d --build posivex_api`.
+- **`.env.prod`** (the agent): `TRANSFER_ENABLED=true`, `TEAM_BRIEFING_URL=https://xyz.thebestdevsolutions.space/api/webhooks/elevenlabs/tools/team-briefing`,
+  `TEAM_BRIEFING_SECRET=<lead-gen's AGENT_TOOL_SECRET>`. Then `uv run python scripts/deploy_agent.py --dry-run`, then without `--dry-run`.
+  (`TRANSFER_TO` stays unset: it defaults to the team line. For a first test, set it to your own mobile in `.env.prod` only, and remove it afterwards.)
+- Deploy the API first, then the agent. Without the briefing variables the transfer still works; only the team email is skipped (the log says so).
+
+**4. Check it on a real call** from lead-gen's manual call page to your own phone: answer, say *"Can I talk to a real person?"*.
+Expect: the hand-over line, a team briefing email at the team address within seconds, the team line ringing, and the call ending as `transferred`.
+Then try the failure: have nobody answer the team line (or set `TRANSFER_TO` to a number that does not answer): after 30 s the agent should say it could not
+reach the team and offer the team line or a callback. In `lk agent logs --project posivex-new`: `Transferring the call to the team line.` then either
+`Call transferred to the team line.` or `Transfer to the team line did not connect (...)`.
+
+**5. Switch it off** (any time, no code): set `TRANSFER_ENABLED=false` in `.env.prod` and redeploy the agent, then on the server `.env` and rebuild the API.
+The prompt goes back to "cannot transfer", and the tool disappears. `lk agent rollback --project posivex-new` also works for the agent alone.
+
+**Limits.** LiveKit counts "the team line answered" as success, so a voicemail box or a phone menu on that line also counts: it must be a staffed phone or ring group.
+After the hand-over the call is on Telnyx only; it uses no LiveKit session and the recording ends. `transfer.destination` is never read from a dial request.
+
 ### 7.7 Rolling the agent back (Ship plan and above)
 
 A deploy that goes wrong is undone without rebuilding. Always name the project: the CLI's default may be the old one.

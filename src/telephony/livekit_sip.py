@@ -87,6 +87,13 @@ class LiveKitSIPProvider(TelephonyProvider):
         # 2. Dial SIP participant. The agent is already dispatched, and dispatching created the room, so if the phone
         # leg cannot be created the room is deleted: otherwise the agent waits in it for a callee who never comes,
         # holding one of the plan's concurrent sessions.
+        # A live transfer needs a media timeout longer than the transfer's ringing time: the carrier may stop sending audio once
+        # it accepts the REFER, and LiveKit's default (15 s) would end the call before the team line has answered.
+        extra: dict[str, object] = {}
+        if self._settings.transfer.enabled:
+            media = api.SIPMediaConfig()
+            media.media_timeout.FromSeconds(int(self._settings.transfer.media_timeout_seconds))
+            extra["media"] = media
         try:
             sip_part = await lkapi.sip.create_sip_participant(
                 api.CreateSIPParticipantRequest(
@@ -104,6 +111,7 @@ class LiveKitSIPProvider(TelephonyProvider):
                     },
                     play_ringtone=True,
                     max_call_duration={"seconds": self._settings.conversation.max_duration_seconds},
+                    **extra,  # type: ignore[arg-type]
                 )
             )
         except Exception:

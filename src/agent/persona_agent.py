@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from collections.abc import AsyncIterable, Callable, Coroutine, Iterable
+from collections.abc import AsyncIterable, Callable, Coroutine, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -79,6 +79,9 @@ class CallState:
     do_not_call: bool = False
     end_reason: str | None = None
     hold_until: float = 0.0  # time.monotonic() deadline set by skip_turn
+    # A live transfer to the team line: in flight, and done (the call then ends with the caller connected to the team).
+    transferring: bool = False
+    transferred: bool = False
 
     @property
     def is_holding(self) -> bool:
@@ -106,6 +109,7 @@ class PersonaAgent(Agent):
         hold_duration_seconds: float = 30.0,
         hold_replies: bool = False,
         on_gated_turn: Callable[[str], None] | None = None,
+        extra_tools: Sequence[Any] = (),
     ) -> None:
         self.call_state = call_state
         self._on_end_call = on_end_call
@@ -119,7 +123,8 @@ class PersonaAgent(Agent):
         self._on_gated_turn = on_gated_turn
         self._generation_text = ""
         self._end_call_warned = False
-        super().__init__(instructions=instructions)
+        # Tools that exist only for some calls (the transfer tool). The ones below are on every call.
+        super().__init__(instructions=instructions, tools=list(extra_tools))
 
     # ---- session access ------------------------------------------------------------------------
     @property

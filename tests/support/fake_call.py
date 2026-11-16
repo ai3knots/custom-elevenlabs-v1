@@ -13,7 +13,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 
-from livekit import rtc
+from livekit import api, rtc
 
 from src.agent.greeting_detector import GreetingVerdict
 
@@ -161,7 +161,7 @@ class FakeJobContext:
         self.local = FakeLocalParticipant()
         self.room = SimpleNamespace(name=room_name, metadata=None, remote_participants={}, local_participant=self.local)
         self.proc = SimpleNamespace(userdata={})
-        self.api = None
+        self.api: Any = None
         self.log_context_fields: dict[str, Any] = {}
         self.callee = callee
         self.never_joins = never_joins
@@ -193,6 +193,43 @@ class FakeJobContext:
         for callback in self._callbacks:
             await callback()
         self.shutdown_finished.set()
+
+
+def sip_error(reason: str, *, status_code: int | None = None) -> api.SipCallError:
+    """The error LiveKit raises when a transfer does not connect (`sip_transfer_reason` is e.g. STR_RINGING_TIMEOUT)."""
+    metadata = {"sip_transfer_reason": reason}
+    if status_code:
+        metadata["sip_status_code"] = str(status_code)
+        metadata["sip_status"] = "Busy Here"
+    return api.SipCallError("aborted", "transfer failed", status=409, metadata=metadata)
+
+
+class FakeSipApi:
+    """Stand-in for `ctx.api.sip`: records transfer requests and plays back the outcomes a test queues up.
+
+    An outcome is None (the team line answered), an exception to raise, or an asyncio.Event to wait for first.
+    """
+
+    def __init__(self, *outcomes: Any) -> None:
+        self.transfers: list[Any] = []
+        self._outcomes = list(outcomes)
+
+    async def transfer_sip_participant(self, request: Any) -> Any:
+        self.transfers.append(request)
+        outcome = self._outcomes.pop(0) if self._outcomes else None
+        if isinstance(outcome, asyncio.Event):
+            await outcome.wait()
+            return None
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class FakeLiveKitApi:
+    """Stand-in for `ctx.api` in a transfer test."""
+
+    def __init__(self, *outcomes: Any) -> None:
+        self.sip = FakeSipApi(*outcomes)
 
 
 class FakeRecorder:

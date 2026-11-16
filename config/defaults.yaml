@@ -129,6 +129,19 @@ phone_numbers:
     label: "Posivex 470-742-7057"
     sip_trunk_id: "ST_ZhFrYvSfd9po"
 
+# Live transfer to our team (a cold transfer: SIP REFER through the call's own trunk). Off until the carrier has SIP REFER enabled
+# (docs/RUNBOOK.md 7.10). `enabled` must be true on the API (it lengthens the media timeout of the calls it dials) and on the agent.
+# Env: TRANSFER_ENABLED, TRANSFER_TO, TEAM_BRIEFING_URL, TEAM_BRIEFING_SECRET. The destination cannot be set per call.
+transfer:
+  enabled: false
+  destination: "+12292028500" # the team line (229) 202-8500, a staffed phone
+  ringing_timeout_seconds: 30.0 # give up when the team line has not answered by then; the caller is back with the agent
+  media_timeout_seconds: 60.0 # must be longer than the ringing timeout (the carrier may stop sending audio after the REFER)
+  play_dialtone: false
+  max_attempts: 2
+  briefing_url: "" # lead-gen's /api/webhooks/elevenlabs/tools/team-briefing; blank skips the briefing email
+  briefing_timeout_seconds: 1.5
+
 # Call recording through LiveKit egress to an S3-compatible bucket. Env: RECORDING_ENABLED, RECORDING_BUCKET,
 # RECORDING_REGION, RECORDING_ENDPOINT, RECORDING_ACCESS_KEY, RECORDING_SECRET, RECORDING_PREFIX.
 recording:

@@ -462,7 +462,9 @@ Defaults live in `config/defaults.yaml` (and the schemas in `src/config/models.p
 
 ## 15. Not built, not known, and next steps
 
-**Not built on the voice API** (these stay on ElevenLabs agents): the inbound-call initiation webhook, team briefing, live transfer, demo-ready mode and the demo-callback agent. A booked demo on a LiveKit call therefore does not notify the team, and the agent promises a calendar invite nothing sends. Real leads should not be sent for demo bookings until these are ported.
+**Not built on the voice API** (these stay on ElevenLabs agents): the inbound-call initiation webhook, demo-ready mode (the booked-demo callback) and the demo-callback agent. A booked demo on a LiveKit call does not notify the team, and the agent promises a calendar invite nothing sends. Real leads should not be sent for demo bookings until these are ported.
+
+**Live transfer (built, off by default).** When the owner asks to talk to a person the agent can transfer the call to the team line (`src/agent/transfer.py`, RUNBOOK 7.10): a cold transfer with `TransferSIPParticipant` (SIP REFER). The tool says one line, posts a `transfer_now` briefing to lead-gen's team-briefing webhook (best effort, 1.5 s), then transfers; the REFER runs in its own task, because LiveKit closes the caller's session when it succeeds, and the finalizer waits for it. A successful transfer ends the call as `transferred` with outcome `consultant_call_scheduled`, and the payload carries a `transfer_to_number` tool call that lead-gen already recognises. A failed attempt leaves the call with the agent (two attempts at most). `transfer.destination` is not overridable per call.
 
 **Not known from here:** the nginx configuration, Telnyx portal settings, which region hosts the LiveKit room, and the live false-positive rate of the voicemail check (it needs a round of real calls).
 
@@ -478,6 +480,7 @@ Defaults live in `config/defaults.yaml` (and the schemas in `src/config/models.p
 | `src/api/` | FastAPI app factory (`create_app`, nothing is built at import), dependencies (auth), routes (`convai_emulation`, `convai_read`, `internal`, `health`) and `services/dispatch.py` (the dial flow behind the dial route) |
 | `src/agent/session_handler.py` | The LiveKit entrypoint: reads the dispatch, builds the providers, hands the call to `CallSession`; worker prewarm and the server factory |
 | `src/agent/call_session/` | One call, a piece per concern: `session.py` (wires and runs them), `lifecycle.py` (first end reason wins, goodbye rescue, time cap), `silence_control.py` (the nudge, the watchdog), `greeting_check.py`, `opening.py` (the opener and overlap), `finalizer.py` (outcome, cost, report), `timeline.py`, `transcript.py`, `waits.py`, `telemetry.py` |
+| `src/agent/transfer.py` | The live transfer to the team line: the `transfer_call` tool, the REFER, the team briefing, and how failures are told to the model (only built on a call when `transfer.enabled`) |
 | `src/agent/room_options.py` | The room options of a call: hang up on close, and Krisp NC noise cancellation on the callee's audio (`conversation.noise_cancellation`; a plugin that fails to load never fails the call) |
 | `src/agent/persona_agent.py` | The agent class, its three tools and the call state |
 | `src/agent/greeting_detector.py` | The voicemail and phone-menu check |

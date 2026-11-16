@@ -15,6 +15,7 @@ from src.agent.call_session.timeline import CallTimeline
 from src.agent.call_session.transcript import TranscriptBuffer
 from src.agent.greeting_detector import machine_outcome
 from src.agent.persona_agent import CallState
+from src.agent.transfer import CallTransferrer
 from src.analysis import CallSignals, OutcomeResult, resolve_call_outcome
 from src.metrics.costs import CostAccumulator
 
@@ -74,8 +75,10 @@ class CallFinalizer:
         agent_id: str,
         agent_name: str,
         classify_outcome: OutcomeClassifier,
+        transfer: CallTransferrer | None = None,
     ) -> None:
         self._session = session
+        self._transfer = transfer
         self._call_state = call_state
         self._lifecycle = lifecycle
         self._timeline = timeline
@@ -95,6 +98,8 @@ class CallFinalizer:
         if self._finalized:
             return
         self._finalized = True
+        if self._transfer is not None:
+            await self._transfer.settle()  # a transfer in flight decides whether the call was transferred
         timeline = self._timeline
         # Counted from pickup, not job start: ringing is not call time (0 for a call nobody answered).
         duration = timeline.clock.since_pickup()
@@ -103,7 +108,7 @@ class CallFinalizer:
         result = await resolve_call_outcome(list(self._transcript.entries), self._signals, self._classify_outcome)
         logger.info("Call outcome: %s (%s) [%s]", result.outcome, result.rationale, result.source)
         usage_into_costs(self._session, self._costs, duration)
-        reason = self._lifecycle.reason or "normal_completion"
+        reason = "transferred" if self._call_state.transferred else (self._lifecycle.reason or "normal_completion")
         timeline.mark(
             "call_end",
             reason=reason,
@@ -143,6 +148,9 @@ class CallFinalizer:
         signals.greeting_verdict = state.greeting_verdict
         signals.voicemail_tool_called = state.voicemail_detected
         signals.do_not_call_requested = state.do_not_call
+        if state.transferred and not signals.forced_outcome:
+            signals.forced_outcome = "consultant_call_scheduled"
+            signals.forced_rationale = "The owner asked to talk to a person and the call was transferred live to our team."
         if state.voicemail_detected and not signals.forced_outcome:
             signals.forced_outcome = machine_outcome(state.machine_kind)[0]
             signals.forced_rationale = (

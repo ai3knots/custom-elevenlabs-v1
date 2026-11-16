@@ -11,29 +11,33 @@ import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from livekit.agents import room_io
+from livekit.agents.llm import ToolError
 
 from src.agent import session_handler
 from src.agent.greeting_detector import GreetingVerdict
 from src.agent.opener import OVERLAP_REPLY_INSTRUCTIONS
 from src.agent.silence import NUDGE_INSTRUCTIONS
 from src.analysis import OutcomeResult
-from src.config import Settings
+from src.config import Settings, TransferConfig
 from tests.support.fake_call import (
     AGENT_ID,
     CALL_ID,
     PHONE,
     FakeClassifier,
     FakeJobContext,
+    FakeLiveKitApi,
     FakeRecorder,
     FakeSession,
     browser_callee,
     call_metadata,
     settle,
     sip_callee,
+    sip_error,
     wait_until,
 )
 from tests.support.mock_providers import MockLLM, MockSTT, MockTTS, MockVAD
@@ -560,3 +564,80 @@ async def test_a_call_starts_without_noise_cancellation_when_switched_off(make_h
     await harness.run()
     assert harness.session.room_options == room_io.RoomOptions(delete_room_on_close=True)
     assert harness.ctx.local.published[0]["noise_cancellation"] is False
+
+# ---- live transfer to the team line (the unit tests are in test_transfer.py) ---------------------------
+def settings_with_transfer(**transfer: Any) -> Settings:
+    settings = make_settings()
+    settings.transfer = TransferConfig(enabled=True, **transfer)
+    return settings
+
+
+def find_tool(harness: Harness, name: str) -> Any:
+    return next((t for t in harness.session.agent.tools if (getattr(t, "id", None) or t.info.name) == name), None)
+
+
+async def test_the_transfer_tool_exists_only_when_transfers_are_switched_on(make_harness: Callable[..., Harness]) -> None:
+    off = make_harness(callee=sip_callee(), settings=make_settings())
+    await off.run()
+    assert find_tool(off, "transfer_call") is None
+
+    on = make_harness(callee=sip_callee(), settings=settings_with_transfer())
+    on.ctx.api = FakeLiveKitApi()
+    await on.run()
+    assert find_tool(on, "transfer_call") is not None
+    for name in ("end_call", "skip_turn", "voicemail_detection"):
+        assert find_tool(on, name) is not None
+
+
+async def test_a_transferred_call_is_reported_as_transferred_with_a_hot_outcome(
+    make_harness: Callable[..., Harness],
+) -> None:
+    harness = make_harness(callee=sip_callee(), settings=settings_with_transfer())
+    harness.ctx.api = FakeLiveKitApi(None)
+    await harness.run()
+
+    await find_tool(harness, "transfer_call")(SimpleNamespace(session=harness.session), summary="Wants a person.")
+    report = await harness.finish()
+
+    assert harness.ctx.api.sip.transfers[0].transfer_to == "tel:+12292028500"
+    assert report["termination_reason"] == "transferred"
+    assert report["call_outcome"] == "consultant_call_scheduled"
+    assert "transferred live" in report["outcome_rationale"]
+    assert "call_transferred" in harness.recorder.event_names()
+    assert harness.recorder.finalize_count == 1
+
+
+async def test_a_transfer_that_did_not_connect_leaves_the_call_to_end_normally(
+    make_harness: Callable[..., Harness],
+) -> None:
+    harness = make_harness(callee=sip_callee(), settings=settings_with_transfer())
+    harness.ctx.api = FakeLiveKitApi(sip_error("STR_RINGING_TIMEOUT"))
+    await harness.run()
+
+    with pytest.raises(ToolError):
+        await find_tool(harness, "transfer_call")(SimpleNamespace(session=harness.session))
+    report = await harness.finish()
+
+    assert report["termination_reason"] != "transferred"
+    assert report["call_outcome"] != "consultant_call_scheduled"
+    assert "transfer_failed" in harness.recorder.event_names()
+
+
+async def test_the_report_waits_for_a_transfer_that_is_still_in_flight(make_harness: Callable[..., Harness]) -> None:
+    """LiveKit closes the caller's session as the transfer succeeds, before the tool returns: the call must still be reported
+    as transferred, so the finalizer waits for the transfer to settle."""
+    release = asyncio.Event()
+    harness = make_harness(callee=sip_callee(), settings=settings_with_transfer())
+    harness.ctx.api = FakeLiveKitApi(release)
+    await harness.run()
+
+    tool = asyncio.ensure_future(find_tool(harness, "transfer_call")(SimpleNamespace(session=harness.session)))
+    await settle()
+    harness.session.shutdown(drain=False)  # the session closes while the REFER is still being answered
+    tool.cancel()
+    asyncio.get_running_loop().call_later(0.05, release.set)  # then the carrier reports success
+    report = await harness.finish()
+
+    assert report["termination_reason"] == "transferred"
+    assert report["call_outcome"] == "consultant_call_scheduled"
+    assert harness.recorder.finalize_count == 1

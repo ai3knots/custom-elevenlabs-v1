@@ -56,16 +56,24 @@ class PromptManager:
         """The scripted opening line (English only)."""
         return FIRST_MESSAGE_TEMPLATE.format(name=self.display_name, question=self.opening_question(variables))
 
-    def render_system_prompt(self, variables: DynamicVariables) -> str:
-        """Render the persona's system prompt with the dynamic variables."""
+    def render_system_prompt(self, variables: DynamicVariables, *, transfer_enabled: bool = False) -> str:
+        """Render the persona's system prompt with the dynamic variables.
+
+        `transfer_enabled` is not a lead-gen variable: it switches on the prompt's live-transfer wording, which is only
+        right when the agent really has the transfer_call tool.
+        """
         template = self.jinja_env.get_template(f"{self.persona}/system.j2")
         # The prompt quotes the opener the caller already heard, so it must use the same resolved question.
-        context = {**variables.model_dump(), "opening_question": self.opening_question(variables)}
+        context = {
+            **variables.model_dump(),
+            "opening_question": self.opening_question(variables),
+            "transfer_enabled": transfer_enabled,
+        }
         return template.render(**context)
 
-    def render_prompt(self, variables: DynamicVariables) -> str:
+    def render_prompt(self, variables: DynamicVariables, *, transfer_enabled: bool = False) -> str:
         """Complete instructions for the agent: system prompt followed by the knowledge base."""
-        sections = [self.render_system_prompt(variables)]
+        sections = [self.render_system_prompt(variables, transfer_enabled=transfer_enabled)]
         try:
             kb_text = self.kb_provider.load_kb()
         except Exception:

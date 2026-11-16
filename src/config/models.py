@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -148,6 +149,38 @@ class TelephonyConfig(BaseModel):
     max_concurrent_calls: int = 20
 
 
+class TransferConfig(BaseModel):
+    """Live transfer to our team's phone: a cold transfer (SIP REFER through the call's own trunk).
+
+    Off by default. It needs SIP REFER enabled at the carrier (docs/RUNBOOK.md 7.10), and `enabled` must be true for the
+    API too (it lengthens the media timeout of every call it dials) as well as for the agent.
+    `destination` is never settable per call: it is not in the allow-list of `config_overrides`.
+    """
+
+    enabled: bool = False
+    destination: str = "+12292028500"
+    # How long the team line may ring before the transfer is given up and the caller is back with the agent.
+    ringing_timeout_seconds: float = 30.0
+    # The carrier may stop sending audio once it accepts the REFER, so the call's media timeout must outlast the ringing
+    # (LiveKit's default is 15 s). Set on the SIP participant when the API dials.
+    media_timeout_seconds: float = 60.0
+    play_dialtone: bool = False
+    # Transfers attempted in one call: a first try and one more if the first did not connect.
+    max_attempts: int = 2
+    # The team briefing: lead-gen's team-briefing webhook, called just before the transfer so the team is told who is coming.
+    briefing_url: str = ""
+    briefing_secret: str = ""
+    briefing_timeout_seconds: float = 1.5
+
+    @model_validator(mode="after")
+    def _destination_is_a_phone_number(self) -> TransferConfig:
+        if self.enabled and not re.fullmatch(r"\+[1-9]\d{7,14}", self.destination):
+            raise ValueError("transfer.destination must be a phone number in E.164 format, for example +12292028500")
+        if self.media_timeout_seconds <= self.ringing_timeout_seconds:
+            raise ValueError("transfer.media_timeout_seconds must be longer than transfer.ringing_timeout_seconds")
+        return self
+
+
 class AgentEntry(BaseModel):
     """An agent id that lead-gen can dial with, and the persona (prompt) that serves it."""
 
@@ -213,6 +246,7 @@ class Settings(BaseSettings):
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     telephony: TelephonyConfig = Field(default_factory=TelephonyConfig)
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
+    transfer: TransferConfig = Field(default_factory=TransferConfig)
 
     # Lead-gen integration (the ElevenLabs-compatible API)
     agents: list[AgentEntry] = Field(

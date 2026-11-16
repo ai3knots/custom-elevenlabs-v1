@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -272,3 +273,24 @@ async def test_an_unknown_number_id_still_dials_through_the_default_trunk_and_is
     with caplog.at_level(logging.WARNING):
         assert await _trunk_used(provider, lkapi, "phnum_mystery") == "ST_default"
     assert "phnum_mystery" in caplog.text and "not configured" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_the_dial_lengthens_the_media_timeout_only_when_transfers_are_on() -> None:
+    """The carrier may stop sending audio once it accepts a REFER; the default 15 s would end the call before the team answers."""
+
+    async def dial(transfer_enabled: bool) -> Any:
+        lkapi = MagicMock()
+        lkapi.agent_dispatch.create_dispatch = AsyncMock()
+        lkapi.sip.create_sip_participant = AsyncMock(return_value=api.SIPParticipantInfo(participant_id="p", sip_call_id="s"))
+        settings = Settings(
+            telephony={"provider": "livekit_sip", "sip_trunk_id": "ST_default"},  # type: ignore[arg-type]
+            transfer={"enabled": transfer_enabled},  # type: ignore[arg-type]
+        )
+        await LiveKitSIPProvider(settings, api_client=lkapi).dial(_make_call_request(), room_name="room")
+        return lkapi.sip.create_sip_participant.call_args[0][0]
+
+    on = await dial(True)
+    assert on.HasField("media") and on.media.media_timeout.seconds == 60
+    off = await dial(False)
+    assert not off.HasField("media")

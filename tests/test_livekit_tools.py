@@ -9,11 +9,16 @@ tests/test_run_agent_session.py instead.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from livekit.agents import AgentSession
+from livekit.agents.llm import ToolContext
 
 from src.agent.persona_agent import CallState, PersonaAgent
+from src.agent.transfer import CallTransferrer, build_transfer_tool
+from src.config import CallRequest, TransferConfig
+from tests.support.fake_call import FakeLiveKitApi
 from tests.support.mock_providers import ScriptedLLM
 
 
@@ -71,3 +76,57 @@ async def test_skip_turn_starts_a_hold_and_stays_quiet(ended: list[tuple[str, bo
     agent, state = make_agent(ended)
     await run_turn(agent, ScriptedLLM("", [("skip_turn", '{"reason": "checking with owner"}')]))
     assert state.is_holding and ended == []
+
+
+# ---- the transfer tool (it exists only on calls that may be transferred) ------------------------------------------
+def make_transfer_agent(
+    ended: list[tuple[str, bool]], api: FakeLiveKitApi, *, phone: bool = True
+) -> tuple[PersonaAgent, CallState]:
+    state = CallState()
+
+    async def emit(event_type: str, payload: dict[str, Any]) -> None:
+        return None
+
+    transferrer = CallTransferrer(
+        ctx=SimpleNamespace(room=SimpleNamespace(name="call_x"), api=api),
+        call_request=CallRequest(call_id="lk_x", phone="+14045550000"),
+        config=TransferConfig(enabled=True),
+        call_state=state,
+        is_phone_call=lambda: phone,
+        callee_identity=lambda: "phone_+14045550000",
+        call_ending=lambda: False,
+        end_call=lambda r, d: ended.append((r, d)),
+        emit=emit,
+    )
+    agent = PersonaAgent(
+        instructions="You are Amelia.",
+        call_state=state,
+        on_end_call=lambda r, d: ended.append((r, d)),
+        extra_tools=[build_transfer_tool(transferrer)],
+    )
+    return agent, state
+
+
+def test_the_model_sees_transfer_call_with_four_optional_arguments_and_no_context(ended: list[tuple[str, bool]]) -> None:
+    agent, _ = make_transfer_agent(ended, FakeLiveKitApi())
+    schemas = {s["function"]["name"]: s["function"] for s in ToolContext(agent.tools).parse_function_tools("openai")}
+    assert sorted(schemas) == ["end_call", "skip_turn", "transfer_call", "voicemail_detection"]
+    properties = schemas["transfer_call"]["parameters"]["properties"]
+    assert sorted(properties) == ["callback_number", "prospect_email", "prospect_name", "summary"]  # the RunContext is injected
+    assert "only when the owner or the person who makes the decision asks to talk to a person" in schemas["transfer_call"]["description"]
+
+
+def test_without_the_transfer_tool_the_models_tools_are_the_same_three(ended: list[tuple[str, bool]]) -> None:
+    agent, _ = make_agent(ended)
+    assert sorted(ToolContext(agent.tools).function_tools) == ["end_call", "skip_turn", "voicemail_detection"]
+
+
+async def test_a_refused_transfer_comes_back_to_the_model_as_a_tool_error_and_the_call_goes_on(
+    ended: list[tuple[str, bool]],
+) -> None:
+    """Through LiveKit's own machinery: the framework binds the RunContext, runs the tool, and reports its ToolError."""
+    api = FakeLiveKitApi()
+    agent, state = make_transfer_agent(ended, api, phone=False)
+    turn = await run_turn(agent, ScriptedLLM("", [("transfer_call", '{"summary": "Wants a person."}')]))
+    assert "FunctionCallOutputEvent" in turn.events
+    assert api.sip.transfers == [] and ended == [] and state.transferred is False

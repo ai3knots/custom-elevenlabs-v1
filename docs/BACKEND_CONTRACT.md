@@ -195,6 +195,13 @@ class CallRequest(BaseModel):
 
 ---
 
+**Live transfer (when `transfer.enabled`).** Each transfer attempt adds an agent turn with a tool call and result named `transfer_to_number`
+(lead-gen's `isTransferTool` matches `transfer_to_*`). A transfer that connected has `result_value` `Call was transferred to number`, the call's
+`metadata.termination_reason` is `transferred` (lead-gen's `transferStatusOf` matches `/transferred/`), and the outcome is `consultant_call_scheduled`.
+An attempt that did not connect has `is_error: true` and `result_value` `Transfer failed: ...`, and the call ends in its usual way. Before it transfers,
+the agent also posts a `transfer_now` briefing to lead-gen's `/api/webhooks/elevenlabs/tools/team-briefing` (header `X-Agent-Tool-Secret`, the same
+secret as lead-gen's `AGENT_TOOL_SECRET`).
+
 ### 3.3 Call Outcome Enum & Normalization Rules
 
 `Posivex-lead-gen` (`src/lib/call-outcome.ts`) categorizes outcomes into strict groups:

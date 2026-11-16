@@ -180,3 +180,27 @@ def test_prompt_quotes_the_same_opener_that_is_spoken_when_no_question_is_sent()
         spoken = manager.get_first_message(variables)
         assert spoken.endswith("Am I speaking with the owner of Tony's Pizza & Grill?")
         assert f'"{spoken}"' in manager.render_system_prompt(variables)
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_the_prompt_promises_no_transfer_unless_the_agent_has_the_transfer_tool(persona: str) -> None:
+    """Off: the agent cannot transfer and says so. On: it transfers, only when the owner asks, with the tool."""
+    variables = DynamicVariables(business_name="Tony's Pizza & Grill")
+    manager = PromptManager(persona=persona)  # type: ignore[arg-type]
+
+    off = manager.render_system_prompt(variables)
+    assert "You cannot transfer or connect a call." in off
+    assert "transfer_call" not in off and "{%" not in off
+
+    on = manager.render_system_prompt(variables, transfer_enabled=True)
+    assert "You cannot transfer or connect a call." not in on
+    assert "transfer_call" in on and "{%" not in on
+    assert "only when the owner or the person who makes the decision asks to talk to a person" in on
+    assert "never transfer staff, a machine or a menu" in on
+    assert "two two nine, two zero two, eight five zero zero" in on  # the team line stays the fallback
+    # The personas are kept in step: the same transfer wording in both.
+    other = "michael" if persona == "amelia" else "amelia"
+    other_on = PromptManager(persona=other).render_system_prompt(variables, transfer_enabled=True)  # type: ignore[arg-type]
+    assert [line for line in on.splitlines() if "transfer_call" in line] == [
+        line for line in other_on.splitlines() if "transfer_call" in line
+    ]
