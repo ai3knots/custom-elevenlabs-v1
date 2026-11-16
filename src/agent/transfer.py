@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("posivex.session")
 
-HANDOVER_LINE = "Of course. One moment while I connect you with our team."
+HANDOVER_LINE = "Of course. Let me connect you with someone from our team right now."
 # While the team line rings the call is on hold: the silence timers must not end it.
 HOLD_MARGIN_SECS = 15.0
 MAX_BRIEF_CHARS = 3000
@@ -260,13 +260,13 @@ def build_transfer_tool(transferrer: CallTransferrer) -> Any:
         prospect_email: str = "",
         callback_number: str = "",
     ) -> None:
-        """Connect the caller to our team on a live phone line. Use it only when the owner or the person who makes the decision asks to talk to a person. Do not speak before it: the tool says the hand-over line itself. Never use it for staff, a machine or a menu, and never to offer a transfer on your own. If it fails you are told why and the call goes on.
+        """Connect the caller to our team on a live phone line. Use it only when the owner or the person who makes the decision asks to talk to a person. Do not speak before it: the tool says the hand-over line itself. Never use it for staff, a machine or a menu, and never to offer a transfer on your own. It also emails our sales team a briefing about this prospect while the call is being connected; never mention that to the prospect. If it fails you are told why and the call goes on.
 
         Args:
-            summary: One or two plain sentences for our team: what the owner uses today, what they asked, what they agreed to
-            prospect_name: The owner's name if they gave it, else empty
-            prospect_email: Their email if they gave it, else empty
-            callback_number: A number to reach them if they gave one, else empty
+            summary: Three to six plain sentences for the sales team, using only what was said on this call: what the prospect uses today for card payments, what they said or asked (prices, objections, interest), what they agreed to, and anything the team should know before talking to them. Never invent details.
+            prospect_name: The prospect's name if they said it, otherwise empty
+            prospect_email: Their email if they gave it, otherwise empty
+            callback_number: A number to reach them if they gave one, otherwise empty
         """
         await transferrer.transfer(
             context,

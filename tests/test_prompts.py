@@ -204,3 +204,23 @@ def test_the_prompt_promises_no_transfer_unless_the_agent_has_the_transfer_tool(
     assert [line for line in on.splitlines() if "transfer_call" in line] == [
         line for line in other_on.splitlines() if "transfer_call" in line
     ]
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_the_transfer_rules_carry_the_trigger_and_the_exclusions_of_the_live_elevenlabs_agent(persona: str) -> None:
+    """The live ElevenLabs agent decides a transfer with an 'asks for a human' condition; those words are now the tool's rules."""
+    on = PromptManager(persona=persona).render_system_prompt(  # type: ignore[arg-type]
+        DynamicVariables(business_name="Tony's Pizza & Grill"), transfer_enabled=True
+    )
+    for phrase in (
+        "no AI, someone personal",  # a request, in the words callers use
+        "put me through to someone",
+        "Use it even when you have just answered an AI question",
+        "when they only ask whether you are an AI or a real person",  # not a request: answer it first
+        "offers to get their own owner or manager",  # staff fetching their own boss is not a request
+        "press two",  # a menu offering a representative is a machine, not the prospect
+        "Do not speak before the tool",  # the tool says the hand-over line itself
+        "never try to end the call; the transfer ends it",
+        "If staff ask for a person, give the team line instead",
+    ):
+        assert phrase in on, phrase

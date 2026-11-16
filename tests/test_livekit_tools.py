@@ -114,6 +114,9 @@ def test_the_model_sees_transfer_call_with_four_optional_arguments_and_no_contex
     properties = schemas["transfer_call"]["parameters"]["properties"]
     assert sorted(properties) == ["callback_number", "prospect_email", "prospect_name", "summary"]  # the RunContext is injected
     assert "only when the owner or the person who makes the decision asks to talk to a person" in schemas["transfer_call"]["description"]
+    assert "never mention that to the prospect" in schemas["transfer_call"]["description"]
+    assert properties["summary"]["description"].startswith("Three to six plain sentences for the sales team")
+    assert "Never invent details" in properties["summary"]["description"]
 
 
 def test_without_the_transfer_tool_the_models_tools_are_the_same_three(ended: list[tuple[str, bool]]) -> None:
