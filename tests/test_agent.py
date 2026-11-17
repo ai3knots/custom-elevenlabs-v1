@@ -198,6 +198,11 @@ def test_parse_call_request_dev_fallback(monkeypatch):
     """ALLOW_DEFAULT_CALL_REQUEST restores the placeholder request for local development."""
     monkeypatch.setenv("ALLOW_DEFAULT_CALL_REQUEST", "true")
     assert parse_call_request_from_room("").phone == "+14045550000"
+    # The made-up business lets the whole pitch be tried in the console, including the category line.
+    variables = parse_call_request_from_room("").dynamic_variables
+    assert variables.business_name == "Tony's Pizza & Grill"
+    assert (variables.model_extra or {}).get("business_category") == "Pizza restaurant"
+    assert "Category: Pizza restaurant" in variables.business_context and variables.current_datetime
     assert parse_call_request_from_room("not-valid-json").phone == "+14045550000"
 
 

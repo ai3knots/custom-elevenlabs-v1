@@ -154,6 +154,30 @@ async def test_malformed_dispatch_metadata_refuses_to_start(make_harness: Callab
     assert harness.sessions == []
 
 
+async def test_a_console_session_without_dispatch_uses_the_made_up_business(make_harness: Callable[..., Harness]) -> None:
+    """`agent console` is LiveKit's fake job with no dispatch: it starts on Tony's Pizza & Grill instead of being refused."""
+    harness = make_harness(no_metadata=True, callee=browser_callee(), settings=make_settings())
+    harness.ctx.is_fake_job = lambda: True  # type: ignore[attr-defined]
+    await harness.run()
+    assert "invalid call metadata" not in harness.ctx.shutdown_reasons
+    assert len(harness.sessions) == 1
+
+
+def test_a_console_job_is_recognised_and_placeholder_metadata_is_not_text() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    mock_job_ctx = SimpleNamespace(
+        job=MagicMock(),  # the console's mock job: every attribute, metadata included, is a MagicMock
+        room=SimpleNamespace(metadata=MagicMock(), remote_participants={}),
+        is_fake_job=lambda: True,
+    )
+    assert session_handler._resolve_raw_metadata(mock_job_ctx) is None  # type: ignore[arg-type]
+    assert session_handler._is_console_job(mock_job_ctx) is True  # type: ignore[arg-type]
+    assert session_handler._is_console_job(SimpleNamespace()) is False  # type: ignore[arg-type]
+    assert session_handler._is_console_job(SimpleNamespace(is_fake_job=lambda: MagicMock())) is False  # type: ignore[arg-type]
+
+
 def test_metadata_sources_in_priority_order() -> None:
     from types import SimpleNamespace
 
@@ -255,6 +279,22 @@ async def test_conversation_is_stored_and_classified(make_harness: Callable[...,
     assert report["call_outcome"] == "callback_set"
     assert report["outcome_rationale"] == "Stub rationale."
     assert report["transcript_summary"] == "Stub summary."
+
+
+async def test_each_turn_is_logged_as_it_happens(
+    make_harness: Callable[..., Harness], caplog: pytest.LogCaptureFixture
+) -> None:
+    """The transcript is only stored at the end of the call; the log shows the conversation while it runs."""
+    harness = make_harness(callee=browser_callee())
+    await harness.run()
+    session = harness.session
+    with caplog.at_level("INFO", logger="posivex.session"):
+        session.item("user", "Yes, speaking.")
+        session.item("assistant", "Great, thanks for picking up.", interrupted=True)
+        session.item("assistant", "")  # empty: nothing to log
+    turns = [r.getMessage() for r in caplog.records if r.getMessage().startswith(("Caller", "Agent"))]
+    assert turns == ["Caller: Yes, speaking.", "Agent (interrupted): Great, thanks for picking up."]
+    await harness.finish()
 
 
 async def test_a_goodbye_without_end_call_hangs_up_after_the_grace_period(

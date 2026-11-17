@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime
 from typing import Any
 
 from dotenv import load_dotenv
@@ -36,7 +37,7 @@ from src.agent.call_session import (
 from src.agent.greeting_detector import GeminiGreetingClassifier
 from src.agent.silence import watch_for_silence
 from src.analysis import classify_transcript
-from src.config import CallRequest, Settings, load_settings
+from src.config import CallRequest, DynamicVariables, Settings, load_settings
 from src.db.base import get_engine, get_sessionmaker
 from src.logging import mask_phone, set_call_id
 from src.persistence.recorder import CallRecorder
@@ -74,6 +75,28 @@ SHUTDOWN_PROCESS_TIMEOUT_SECS = 120.0
 DEV_PLACEHOLDER_PHONE = "+14045550000"
 
 
+def dev_call_request() -> CallRequest:
+    """The request for a local session with no dispatch (the console, `agent dev`): a made-up business, so the whole pitch can be tried.
+
+    Used only with ALLOW_DEFAULT_CALL_REQUEST=true. The clock is the machine's own (no time zone database is needed).
+    """
+    now = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+    return CallRequest(
+        phone=DEV_PLACEHOLDER_PHONE,
+        dynamic_variables=DynamicVariables.model_validate(
+            {
+                "business_name": "Tony's Pizza & Grill",
+                "business_category": "Pizza restaurant",
+                "business_context": (
+                    "Business: Tony's Pizza & Grill\nCategory: Pizza restaurant\nRating: 4.5 stars with 312 reviews\n"
+                    "Address: 1450 Peachtree St, Atlanta, GA\nNo past calls found.\nCall direction: outbound"
+                ),
+                "current_datetime": f"{now} (local time)",
+            }
+        ),
+    )
+
+
 def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
     """Parse and validate CallRequest from dispatch/room metadata JSON.
 
@@ -85,7 +108,7 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
     if not room_metadata:
         if allow_default:
             logger.warning("Empty metadata; using default CallRequest (ALLOW_DEFAULT_CALL_REQUEST).")
-            return CallRequest(phone=DEV_PLACEHOLDER_PHONE)
+            return dev_call_request()
         raise ValueError("No call metadata supplied with the dispatch or room.")
 
     try:
@@ -102,7 +125,7 @@ def parse_call_request_from_room(room_metadata: str | None) -> CallRequest:
             _describe_parse_error(e),
         )
         if allow_default:
-            return CallRequest(phone=DEV_PLACEHOLDER_PHONE)
+            return dev_call_request()
         raise ValueError(f"Invalid call metadata: {e}") from e
 
 
@@ -114,18 +137,24 @@ def _describe_parse_error(e: Exception) -> str:
 
 
 def _resolve_raw_metadata(ctx: JobContext) -> str | None:
-    """Dispatch (job) metadata is authoritative; fall back to room, then participant metadata."""
+    """Dispatch (job) metadata is authoritative; fall back to room, then participant metadata.
+
+    Only real text counts: the console's mock job carries a placeholder object, not metadata.
+    """
+
+    def text(value: Any) -> str | None:
+        return value if isinstance(value, str) and value else None
+
     job = getattr(ctx, "job", None)
-    if job is not None and getattr(job, "metadata", None):
-        return job.metadata
-    if ctx.room.metadata:
-        return ctx.room.metadata
-    if job is not None and getattr(getattr(job, "room", None), "metadata", None):
-        return job.room.metadata
-    for p in ctx.room.remote_participants.values():
-        if p.metadata:
-            return p.metadata
-    return None
+    candidates = [getattr(job, "metadata", None), ctx.room.metadata, getattr(getattr(job, "room", None), "metadata", None)]
+    candidates += [p.metadata for p in ctx.room.remote_participants.values()]
+    return next((found for found in map(text, candidates) if found), None)
+
+
+def _is_console_job(ctx: JobContext) -> bool:
+    """True for the job `agent console` creates on this machine (LiveKit's fake job): no phone is dialed."""
+    is_fake = getattr(ctx, "is_fake_job", None)
+    return callable(is_fake) and is_fake() is True
 
 
 def _prewarmed_vad(ctx: JobContext, settings: Settings) -> Any | None:
@@ -251,7 +280,13 @@ async def run_agent_session(
     await ctx.connect()
 
     try:
-        call_request = parse_call_request_from_room(_resolve_raw_metadata(ctx))
+        raw_metadata = _resolve_raw_metadata(ctx)
+        if raw_metadata is None and _is_console_job(ctx):
+            # `agent console` sends no dispatch: try the pitch on the made-up business without setting an env var.
+            logger.info("Console session: using the made-up business (Tony's Pizza & Grill).")
+            call_request = dev_call_request()
+        else:
+            call_request = parse_call_request_from_room(raw_metadata)
     except ValueError as e:
         logger.error("Refusing to start session in room %s: %s", ctx.room.name, e)
         ctx.shutdown(reason="invalid call metadata")

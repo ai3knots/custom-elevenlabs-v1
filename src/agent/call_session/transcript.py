@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
 from src.agent.persona_agent import is_closing_line
+
+logger = logging.getLogger("posivex.session")
 
 
 class TranscriptBuffer:
@@ -18,6 +21,7 @@ class TranscriptBuffer:
         self.entries.append(
             {"role": "user", "message": text, "time_in_call_secs": self._since_pickup(), "interrupted": False}
         )
+        logger.info("Caller: %s", text)
 
     def add_item(self, ev: Any) -> bool:
         """Store a finished conversation item. True when it is an agent goodbye that was spoken to the end."""
@@ -32,4 +36,6 @@ class TranscriptBuffer:
         self.entries.append(
             {"role": role, "message": text, "time_in_call_secs": self._since_pickup(), "interrupted": interrupted}
         )
+        # The words of each turn, as they happen: the transcript itself is only stored when the call ends.
+        logger.info("%s%s: %s", "Caller" if role == "user" else "Agent", " (interrupted)" if interrupted else "", text)
         return role == "agent" and not interrupted and is_closing_line(text)
