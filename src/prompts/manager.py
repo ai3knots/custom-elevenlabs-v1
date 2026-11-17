@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +15,8 @@ from src.prompts.kb import KnowledgeBaseProvider
 logger = logging.getLogger("posivex.prompts.manager")
 
 # The scripted opening line, spoken verbatim after pickup.
+_VARIANT_NAME = re.compile(r"[a-z0-9_]+")
+
 FIRST_MESSAGE_TEMPLATE = "[warm] Hi, this is {name} from Clover Posivex. {question}"
 
 
@@ -25,8 +28,10 @@ class PromptManager:
         persona: Literal["amelia", "michael"] = "amelia",
         kb_config: KBConfig | None = None,
         prompts_dir: Path | None = None,
+        variant: str = "",
     ) -> None:
         self.persona = persona.lower()
+        self.variant = variant
         self.prompts_dir = prompts_dir or (Path(__file__).resolve().parent.parent.parent / "prompts")
 
         self.jinja_env = Environment(
@@ -56,13 +61,29 @@ class PromptManager:
         """The scripted opening line (English only)."""
         return FIRST_MESSAGE_TEMPLATE.format(name=self.display_name, question=self.opening_question(variables))
 
+    @property
+    def template_name(self) -> str:
+        """The persona's prompt file. A variant (an A/B test version) is `system_<variant>.j2` beside the normal one; a
+        variant that is not a plain name or has no file falls back to the normal prompt, so a bad value never fails a call."""
+        normal = f"{self.persona}/system.j2"
+        if not self.variant:
+            return normal
+        if not _VARIANT_NAME.fullmatch(self.variant):
+            logger.warning("Ignoring prompt variant %r: not a plain name. Using the normal prompt.", self.variant)
+            return normal
+        name = f"{self.persona}/system_{self.variant}.j2"
+        if not (self.prompts_dir / name).is_file():
+            logger.warning("Prompt variant %r has no file (%s). Using the normal prompt.", self.variant, name)
+            return normal
+        return name
+
     def render_system_prompt(self, variables: DynamicVariables, *, transfer_enabled: bool = False) -> str:
         """Render the persona's system prompt with the dynamic variables.
 
         `transfer_enabled` is not a lead-gen variable: it switches on the prompt's live-transfer wording, which is only
         right when the agent really has the transfer_call tool.
         """
-        template = self.jinja_env.get_template(f"{self.persona}/system.j2")
+        template = self.jinja_env.get_template(self.template_name)
         # The prompt quotes the opener the caller already heard, so it must use the same resolved question.
         context = {
             **variables.model_dump(),

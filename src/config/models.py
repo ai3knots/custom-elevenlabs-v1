@@ -187,6 +187,9 @@ class AgentEntry(BaseModel):
     agent_id: str
     name: str
     persona: Literal["amelia", "michael"] = "amelia"
+    # Which version of the persona's prompt serves this id, for A/B tests: "" is prompts/<persona>/system.j2, "b" is
+    # prompts/<persona>/system_b.j2. The voice and every other setting stay the persona's.
+    prompt_variant: str = Field(default="", pattern=r"^[a-z0-9_]*$")
 
 
 class PhoneNumberEntry(BaseModel):
@@ -253,6 +256,12 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             AgentEntry(agent_id="agent_posivex_amelia", name="Posivex LiveKit - Amelia", persona="amelia"),
             AgentEntry(agent_id="agent_posivex_michael", name="Posivex LiveKit - Michael", persona="michael"),
+            AgentEntry(
+                agent_id="agent_posivex_amelia_b", name="Posivex LiveKit - Amelia (B)", persona="amelia", prompt_variant="b"
+            ),
+            AgentEntry(
+                agent_id="agent_posivex_michael_b", name="Posivex LiveKit - Michael (B)", persona="michael", prompt_variant="b"
+            ),
         ]
     )
     phone_numbers: list[PhoneNumberEntry] = Field(
@@ -284,6 +293,11 @@ class Settings(BaseSettings):
         """Persona that serves `agent_id`; unknown ids (for example an old ElevenLabs agent) use `default`."""
         entry = self.agent_for_id(agent_id)
         return entry.persona if entry else default
+
+    def prompt_variant_for_agent(self, agent_id: str | None) -> str:
+        """The prompt variant that serves `agent_id` ("" for the persona's normal prompt, and for any unknown id)."""
+        entry = self.agent_for_id(agent_id)
+        return entry.prompt_variant if entry else ""
 
     def agent_for_persona(self, persona: str) -> AgentEntry:
         """The agent entry advertised for a persona (the first match, else the first entry)."""

@@ -154,6 +154,16 @@ async def test_malformed_dispatch_metadata_refuses_to_start(make_harness: Callab
     assert harness.sessions == []
 
 
+@pytest.mark.parametrize(("variant", "marker"), [("", "Beat 2, explain the reason"), ("b", "Beat 2, ask about their setup")])
+async def test_the_dispatched_prompt_variant_decides_which_prompt_the_agent_gets(
+    make_harness: Callable[..., Harness], variant: str, marker: str
+) -> None:
+    """The A and B agents differ only in the prompt file; the variant rides in the dispatch metadata."""
+    harness = make_harness(callee=browser_callee(), settings=make_settings(), metadata=call_metadata(prompt_variant=variant))
+    await harness.run()
+    assert marker in harness.session.agent.instructions
+
+
 async def test_a_console_session_without_dispatch_uses_the_made_up_business(make_harness: Callable[..., Harness]) -> None:
     """`agent console` is LiveKit's fake job with no dispatch: it starts on Tony's Pizza & Grill instead of being refused."""
     harness = make_harness(no_metadata=True, callee=browser_callee(), settings=make_settings())

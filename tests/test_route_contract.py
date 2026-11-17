@@ -223,6 +223,8 @@ async def test_agents_and_phone_numbers_shapes(env: SimpleNamespace) -> None:
         "agents": [
             {"agent_id": "agent_posivex_amelia", "name": "Posivex LiveKit - Amelia"},
             {"agent_id": "agent_posivex_michael", "name": "Posivex LiveKit - Michael"},
+            {"agent_id": "agent_posivex_amelia_b", "name": "Posivex LiveKit - Amelia (B)"},
+            {"agent_id": "agent_posivex_michael_b", "name": "Posivex LiveKit - Michael (B)"},
         ],
         "has_more": False,
         "next_cursor": None,

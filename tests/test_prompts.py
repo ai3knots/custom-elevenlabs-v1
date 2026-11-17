@@ -65,6 +65,29 @@ def test_michael_prompt_differs_from_amelia_by_name_only(sample_variables: Dynam
     assert michael == amelia.replace("Amelia", "Michael")
 
 
+def test_the_b_prompts_differ_by_name_only_too(sample_variables: DynamicVariables):
+    amelia = PromptManager(persona="amelia", variant="b").render_prompt(sample_variables)
+    michael = PromptManager(persona="michael", variant="b").render_prompt(sample_variables)
+    assert "Amelia" not in michael
+    assert michael == amelia.replace("Amelia", "Michael")
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_a_prompt_variant_picks_its_own_file_and_a_bad_one_falls_back(persona: str, caplog: pytest.LogCaptureFixture) -> None:
+    variables = DynamicVariables(business_name="Tony's Pizza & Grill")
+    normal = PromptManager(persona=persona).render_system_prompt(variables)  # type: ignore[arg-type]
+    b = PromptManager(persona=persona, variant="b").render_system_prompt(variables)  # type: ignore[arg-type]
+    assert PromptManager(persona=persona, variant="b").template_name == f"{persona}/system_b.j2"  # type: ignore[arg-type]
+    assert b != normal
+    assert "Beat 2, ask about their setup" in b and "Beat 2, ask about their setup" not in normal  # the A prompt is the previous pitch
+    assert "Beat 2, explain the reason" in normal
+    for bad in ("nope", "../amelia/system", "B", "b.j2"):  # no such file, or not a plain name
+        manager = PromptManager(persona=persona, variant=bad)  # type: ignore[arg-type]
+        assert manager.template_name == f"{persona}/system.j2", bad
+        assert manager.render_system_prompt(variables) == normal
+    assert "Using the normal prompt" in caplog.text
+
+
 def test_knowledge_base_inline_token_budget():
     """Verify KnowledgeBaseProvider loads inline KB and enforces token budget."""
     cfg = KBConfig(
@@ -261,3 +284,33 @@ def test_the_ai_answer_offers_to_connect_the_caller_when_transfers_are_on(person
     assert "I can connect you with our team right now" not in off  # off: the team line or a callback, as before
     assert "our team line is [slowly, clearly] two two nine... two zero two... eight five zero zero, [calm, friendly] or I can have them call you" in off
 
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_the_pitch_asks_about_the_setup_then_gives_the_reason_then_the_rate(persona: str) -> None:
+    """Beat 2 asks how they take cards, then what they pay; Beat 3 is the reason; Beat 4 leads with the rate."""
+    variables = DynamicVariables.model_validate({"business_name": "Tony's Pizza & Grill", "business_category": "Pizza restaurant"})
+    prompt = PromptManager(persona=persona, variant="b").render_system_prompt(variables)  # type: ignore[arg-type]
+    for phrase in (
+        "I was just calling to see how you're currently handling your card payments.",
+        "Out of curiosity, do you know roughly how much you're paying in card processing fees?",
+        "Yeah, so that's what we do. We work with Pizza restaurant to lower their card processing rates.",
+        "Most owners I speak with are overpaying on card processing without realizing it.",
+        "We process at wholesale rates, so more of every sale stays in your pocket.",
+        "Our wholesale rates are as low as point one percent over interchange",
+        "You never have to hesitate about switching, because our own backend team sets up your whole inventory",
+        "Does that sound useful?",
+    ):
+        assert phrase in prompt, phrase
+    # The beats run in this order.
+    order = [prompt.index(p) for p in ("Beat 2, ask about their setup", "Beat 3, the reason", "Beat 4, the rate", "Beat 5, ask for the statement")]
+    assert order == sorted(order)
+    assert "cheapest rates in the market" not in prompt  # the old Beat 2 line is gone
+    assert "Business category: Pizza restaurant" in prompt
+
+
+@pytest.mark.parametrize("persona", ["amelia", "michael"])
+def test_a_call_without_a_category_still_renders_and_falls_back_to_local_businesses(persona: str) -> None:
+    prompt = PromptManager(persona=persona, variant="b").render_system_prompt(DynamicVariables(business_name="Tony's"))  # type: ignore[arg-type]
+    assert "Business category:  (" in prompt  # blank, not the word None or a template error
+    assert 'say "local businesses" instead' in prompt

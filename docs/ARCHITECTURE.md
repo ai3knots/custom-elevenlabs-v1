@@ -158,7 +158,7 @@ Observed timings on the latest test call: ring 8.1 s, opener requested 1.26 s af
 - **Dial:** by agent id. A listed agent goes to the voice API, any other to ElevenLabs.
 - **Read a conversation or recording:** by conversation id. The voice API's ids start with `lk_`; ElevenLabs ids never do.
 - **Agent and number dropdowns:** both providers are merged. Only the listed voice agents are shown from ours. If one provider is down the other's entries still appear.
-- **Our ids:** agents `agent_posivex_amelia` ("Posivex LiveKit - Amelia") and `agent_posivex_michael`, calling numbers `phnum_posivex_trunk`, `phnum_posivex_0298`, `phnum_posivex_0186` and `phnum_posivex_7057` (each with its own LiveKit trunk, see RUNBOOK 7.6a). These ids must be in `VOICE_API_AGENT_IDS`.
+- **Our ids:** agents `agent_posivex_amelia` ("Posivex LiveKit - Amelia") and `agent_posivex_michael`, plus a B pair `agent_posivex_amelia_b` and `agent_posivex_michael_b` that run the same personas on `system_b.j2` for A/B tests (RUNBOOK 7.11), calling numbers `phnum_posivex_trunk`, `phnum_posivex_0298`, `phnum_posivex_0186` and `phnum_posivex_7057` (each with its own LiveKit trunk, see RUNBOOK 7.6a). These ids must be in `VOICE_API_AGENT_IDS`.
 - **Switching a campaign back:** choose an ElevenLabs agent. Calls already placed through the voice API keep being read from it by their `lk_` id.
 
 ### 4.4 Dialing safety (summary of `call-pipeline-safety.md` and `call-queue.md`)
@@ -209,7 +209,7 @@ All `/v1/convai/*` routes need the header `xi-api-key` equal to the voice API ke
 | Method and path | Used by | Purpose |
 |---|---|---|
 | `POST /v1/convai/sip-trunk/outbound-call` | lead-gen | Place a call |
-| `GET /v1/convai/agents` | lead-gen | List our agents (`agent_posivex_amelia`, `agent_posivex_michael`) |
+| `GET /v1/convai/agents` | lead-gen | List our agents (the A pair and the B pair, `agent_posivex_amelia_b` and `agent_posivex_michael_b`) |
 | `GET /v1/convai/phone-numbers` | lead-gen | List our numbers (four, `phnum_posivex_*`) |
 | `GET /v1/convai/conversations` and `/{id}` | lead-gen | List and read conversations in ElevenLabs format |
 | `GET /v1/convai/conversations/{id}/audio` | lead-gen | Stream the recording from S3 (descriptive 404 when there is none yet) |

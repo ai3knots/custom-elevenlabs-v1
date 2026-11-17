@@ -43,6 +43,8 @@ class CallRequest(BaseModel):
     to_number: str | None = None
     agent_id: str | None = None
     persona: Literal["amelia", "michael"] = "amelia"
+    # Set by the dial service from the agent id (see AgentEntry.prompt_variant); a caller's own value is overwritten.
+    prompt_variant: str = ""
     language: Literal["en", "es"] = "en"
     phone_number_id: str | None = None
     dynamic_variables: DynamicVariables = Field(default_factory=DynamicVariables)

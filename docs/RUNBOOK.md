@@ -438,6 +438,33 @@ The prompt goes back to "cannot transfer", and the tool disappears. `lk agent ro
 **Limits.** LiveKit counts "the team line answered" as success, so a voicemail box or a phone menu on that line also counts: it must be a staffed phone or ring group.
 After the hand-over the call is on Telnyx only; it uses no LiveKit session and the recording ends. `transfer.destination` is never read from a dial request.
 
+### 7.11 A/B testing two versions of the prompt
+
+Each persona has a second agent on a second prompt, so a new pitch can be tried against the old one on real calls.
+
+| Agent id | Name in lead-gen | Persona | Prompt file |
+|---|---|---|---|
+| `agent_posivex_amelia` | Posivex LiveKit - Amelia | Amelia | `prompts/amelia/system.j2` (A) |
+| `agent_posivex_michael` | Posivex LiveKit - Michael | Michael | `prompts/michael/system.j2` (A) |
+| `agent_posivex_amelia_b` | Posivex LiveKit - Amelia (B) | Amelia | `prompts/amelia/system_b.j2` (B) |
+| `agent_posivex_michael_b` | Posivex LiveKit - Michael (B) | Michael | `prompts/michael/system_b.j2` (B) |
+
+The agent id decides the prompt (`prompt_variant` on the agent entry in `config/defaults.yaml`); the voice, model, numbers and transfer are the
+persona's, so the prompt is the only difference. A caller cannot set the variant itself: the dial service overwrites it from the agent id. A variant
+with no file falls back to the normal prompt with a warning in the log.
+
+To run a test:
+
+1. Put the two new ids in lead-gen's `VOICE_API_AGENT_IDS` (`agent_posivex_amelia,agent_posivex_michael,agent_posivex_amelia_b,agent_posivex_michael_b`)
+   and restart lead-gen. Without that they stay routed to ElevenLabs.
+2. Rebuild the API on the server and run `scripts/deploy_agent.py` (the API maps the id; the Cloud agent reads the prompt file).
+3. Run one campaign on the A agent and one on the B agent, on comparable lead lists, at the same times of day. Compare per agent id: statements
+   received, demos booked, transfers, calls that reached a person. Judge Amelia (A) against Amelia (B), not against Michael.
+4. The call log shows `Prompt variant: b (amelia/system_b.j2)` for a B call, and the stored call carries `prompt_variant` in its metadata.
+
+A fix to something shared (a guardrail, a tool rule) goes into both files, or the comparison stops being fair. When a winner is clear, copy its file
+over the A one and delete the B file and entries (or start the next test from the winner).
+
 ### 7.7 Rolling the agent back (Ship plan and above)
 
 A deploy that goes wrong is undone without rebuilding. Always name the project: the CLI's default may be the old one.

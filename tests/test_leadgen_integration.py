@@ -106,7 +106,8 @@ async def test_dedicated_voice_key_is_required_and_the_elevenlabs_key_is_not_acc
 # ---- agents and phone numbers ----------------------------------------------------------------------
 async def test_agents_and_phone_numbers_lists(env: SimpleNamespace) -> None:
     agents = (await env.client.get("/v1/convai/agents", headers=HEADERS)).json()
-    assert [a["agent_id"] for a in agents["agents"]] == [MASTER_AGENT, MICHAEL_AGENT]
+    # The A pair first, then the B pair (the same personas on the B prompt).
+    assert [a["agent_id"] for a in agents["agents"]] == [MASTER_AGENT, MICHAEL_AGENT, "agent_posivex_amelia_b", "agent_posivex_michael_b"]
     numbers = (await env.client.get("/v1/convai/phone-numbers", headers=HEADERS)).json()
     assert numbers[0]["phone_number_id"] == "phnum_posivex_trunk"
     assert numbers[0]["provider"] == "sip_trunk"
@@ -118,6 +119,39 @@ async def test_agent_id_selects_the_persona(env: SimpleNamespace) -> None:
     await dial(env, "agent_some_old_elevenlabs_agent")
     personas = [req.persona for req, _ in env.telephony.dispatched_calls]
     assert personas == ["michael", "amelia"]
+
+
+@pytest.mark.parametrize(
+    ("agent_id", "persona", "variant"),
+    [
+        (MASTER_AGENT, "amelia", ""),
+        (MICHAEL_AGENT, "michael", ""),
+        ("agent_posivex_amelia_b", "amelia", "b"),
+        ("agent_posivex_michael_b", "michael", "b"),
+        ("agent_some_old_elevenlabs_agent", "amelia", ""),
+    ],
+)
+async def test_a_b_agent_ids_select_the_same_persona_with_the_b_prompt(
+    env: SimpleNamespace, agent_id: str, persona: str, variant: str
+) -> None:
+    await dial(env, agent_id)
+    request, _ = env.telephony.dispatched_calls[-1]
+    assert (request.persona, request.prompt_variant) == (persona, variant)
+
+
+async def test_a_caller_cannot_pick_the_prompt_variant_itself(env: SimpleNamespace) -> None:
+    res = await env.client.post(
+        "/v1/convai/sip-trunk/outbound-call",
+        headers=HEADERS,
+        json={
+            "agent_id": MASTER_AGENT,
+            "agent_phone_number_id": "phnum_posivex_trunk",
+            "to_number": "+14045551234",
+            "prompt_variant": "b",
+        },
+    )
+    assert res.status_code == 200
+    assert env.telephony.dispatched_calls[-1][0].prompt_variant == ""  # the agent id decides, not the request body
 
 
 # ---- conversation details -----------------------------------------------------------------------------

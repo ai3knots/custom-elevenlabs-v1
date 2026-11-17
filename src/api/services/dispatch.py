@@ -52,6 +52,7 @@ async def place_call(
 
     # Lead-gen picks an agent by id; the persona (prompt) behind that id decides who speaks.
     request.persona = settings.persona_for_agent(request.agent_id, default=request.persona)  # type: ignore[assignment]
+    request.prompt_variant = settings.prompt_variant_for_agent(request.agent_id)
 
     # 2. Conversation id. The "lk_" prefix is how lead-gen tells our conversations from ElevenLabs' (which are
     # "conv_..."), so it reads each one from the right provider.
@@ -70,6 +71,7 @@ async def place_call(
         status=CallStatus.QUEUED.value,
         metadata_json={
             "agent_id": request.agent_id,
+            "prompt_variant": request.prompt_variant,
             "phone_number_id": request.phone_number_id,
             "dynamic_variables": request.dynamic_variables.model_dump(),
             "config_overrides": request.config_overrides,

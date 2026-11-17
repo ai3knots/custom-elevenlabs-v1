@@ -106,6 +106,16 @@ agents:
   - agent_id: "agent_posivex_michael"
     name: "Posivex LiveKit - Michael"
     persona: "michael"
+  # The B pair: the same personas and voices on the prompt in prompts/<persona>/system_b.j2, for A/B tests
+  # (docs/RUNBOOK.md 7.11). Ids are listed after the A pair so a persona's default agent stays the A one.
+  - agent_id: "agent_posivex_amelia_b"
+    name: "Posivex LiveKit - Amelia (B)"
+    persona: "amelia"
+    prompt_variant: "b"
+  - agent_id: "agent_posivex_michael_b"
+    name: "Posivex LiveKit - Michael (B)"
+    persona: "michael"
+    prompt_variant: "b"
 
 # Calling numbers lead-gen can choose. Each Telnyx number has its own SIP connection, so each has its own LiveKit outbound trunk
 # (created with scripts/setup_telnyx_trunk.py in the project named by LIVEKIT_URL). A call leaves through the trunk of the number

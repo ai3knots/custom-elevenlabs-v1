@@ -321,11 +321,18 @@ async def run_agent_session(
             language=call_request.language,
             lead_id=call_request.lead_id,
             campaign_id=call_request.campaign_id,
-            metadata_json={"dynamic_variables": call_request.dynamic_variables.model_dump()},
+            metadata_json={
+                "dynamic_variables": call_request.dynamic_variables.model_dump(),
+                "prompt_variant": call_request.prompt_variant,
+            },
         ),
     )
 
-    prompt_manager = PromptManager(persona=call_request.persona, kb_config=resolved_settings.kb)
+    prompt_manager = PromptManager(
+        persona=call_request.persona, kb_config=resolved_settings.kb, variant=call_request.prompt_variant
+    )
+    if call_request.prompt_variant:
+        logger.info("Prompt variant: %s (%s)", call_request.prompt_variant, prompt_manager.template_name)
     instructions = await asyncio.to_thread(
         prompt_manager.render_prompt, call_request.dynamic_variables, transfer_enabled=resolved_settings.transfer.enabled
     )

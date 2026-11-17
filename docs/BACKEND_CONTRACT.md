@@ -86,6 +86,9 @@ from typing import Optional, Literal, Dict, Any
 class DynamicVariables(BaseModel):
     business_name: str = Field(..., description="Name of the target business")
     business_context: str = Field("", description="Category, rating, reviews, timezone context")
+    # Optional extra, not declared on the model (extras pass through): the kind of business, e.g. "Pizza restaurant".
+    # Lead-gen sends it on outbound calls; the pitch (Beat 3) says it as a plural, or "local businesses" when blank.
+    # business_category: str = ""
     current_datetime: str = Field(..., description="Local formatted datetime string with timezone")
     is_followup: Literal["true", "false"] = "false"
     followup_notes: str = ""
