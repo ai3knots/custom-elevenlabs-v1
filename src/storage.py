@@ -62,9 +62,10 @@ def verify_bucket_access(cfg: RecordingConfig) -> str | None:
     """
     from botocore.exceptions import BotoCoreError, ClientError
 
-    client = _client(cfg, probe=True)
     key = f"{cfg.prefix.strip('/')}/.startup-check" if cfg.prefix.strip("/") else ".startup-check"
     try:
+        # Building the client can fail too (a RECORDING_REGION that is not a region, such as a copied placeholder).
+        client = _client(cfg, probe=True)
         client.put_object(Bucket=cfg.bucket, Key=key, Body=b"ok")
         client.delete_object(Bucket=cfg.bucket, Key=key)
     except ClientError as e:

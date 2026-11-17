@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import ClientError, EndpointConnectionError, InvalidRegionError
 from fastapi.testclient import TestClient
 
 from src.analysis.outcome import CallSignals, classify_transcript
@@ -93,6 +93,16 @@ def test_bucket_check_writes_and_removes_one_object(monkeypatch: pytest.MonkeyPa
 def test_bucket_check_names_the_setting_to_fix(monkeypatch: pytest.MonkeyPatch, error: Exception, expected: str) -> None:
     monkeypatch.setattr("boto3.client", lambda *a, **k: FakeS3(error))
     assert expected in (verify_bucket_access(recording()) or "")
+
+
+def test_a_region_that_is_not_a_region_is_reported_not_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A placeholder copied from .env.example ('<region code, e.g. us-east-1>') crashed the agent at start-up."""
+
+    def refuse(*a: Any, **k: Any) -> None:
+        raise InvalidRegionError(region_name="<region code, e.g. us-east-1>")
+
+    monkeypatch.setattr("boto3.client", refuse)
+    assert "region_name" in (verify_bucket_access(recording()) or "")
 
 
 def test_recording_check_is_silent_when_off_and_flags_missing_settings(monkeypatch: pytest.MonkeyPatch) -> None:
