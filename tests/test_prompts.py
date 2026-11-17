@@ -22,9 +22,9 @@ def sample_variables() -> DynamicVariables:
 def test_first_message_generation(sample_variables: DynamicVariables):
     """The scripted opener names the persona and the business (English only)."""
     amelia = PromptManager(persona="amelia").get_first_message(sample_variables)
-    assert amelia == "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
+    assert amelia == "[warm] Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
     michael = PromptManager(persona="michael").get_first_message(sample_variables)
-    assert michael == "Hi, this is Michael from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
+    assert michael == "[warm] Hi, this is Michael from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
 
 
 def test_system_prompt_variable_substitution(sample_variables: DynamicVariables):
@@ -148,11 +148,11 @@ def test_callback_first_message_uses_the_question_lead_gen_wrote():
         opening_question="Someone there asked me to call back around one to speak with Mark. Is Mark available?",
     )
     assert PromptManager(persona="amelia").get_first_message(callback) == (
-        "Hi, this is Amelia from Clover Posivex. Someone there asked me to call back around one to speak with Mark. Is Mark available?"
+        "[warm] Hi, this is Amelia from Clover Posivex. Someone there asked me to call back around one to speak with Mark. Is Mark available?"
     )
     blank = DynamicVariables(business_name="Tony's Pizza & Grill", opening_question="   ")
     assert PromptManager(persona="michael").get_first_message(blank) == (
-        "Hi, this is Michael from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
+        "[warm] Hi, this is Michael from Clover Posivex. Am I speaking with the owner of Tony's Pizza & Grill?"
     )
 
 
@@ -198,7 +198,7 @@ def test_the_prompt_promises_no_transfer_unless_the_agent_has_the_transfer_tool(
     assert "when the owner or the person who makes the decision asks to talk to a person or wants the demo right now" in on
     assert "never transfer a machine or a menu" in on
     assert "Apart from that AI answer, never offer a transfer yourself" in on
-    assert "two two nine, two zero two, eight five zero zero" in on  # the team line stays the fallback
+    assert "two two nine... two zero two... eight five zero zero" in on  # the team line stays the fallback
     # The personas are kept in step: the same transfer wording in both.
     other = "michael" if persona == "amelia" else "amelia"
     other_on = PromptManager(persona=other).render_system_prompt(variables, transfer_enabled=True)  # type: ignore[arg-type]
@@ -259,5 +259,5 @@ def test_the_ai_answer_offers_to_connect_the_caller_when_transfers_are_on(person
     assert "if they say yes, or ask for a person, use the transfer_call tool, whoever they are" in on
     off = manager.render_system_prompt(variables)
     assert "I can connect you with our team right now" not in off  # off: the team line or a callback, as before
-    assert "our team line is two two nine, two zero two, eight five zero zero, or I can have them call you" in off
+    assert "our team line is [slowly, clearly] two two nine... two zero two... eight five zero zero, [calm, friendly] or I can have them call you" in off
 

@@ -14,7 +14,7 @@ from src.prompts.kb import KnowledgeBaseProvider
 logger = logging.getLogger("posivex.prompts.manager")
 
 # The scripted opening line, spoken verbatim after pickup.
-FIRST_MESSAGE_TEMPLATE = "Hi, this is {name} from Clover Posivex. {question}"
+FIRST_MESSAGE_TEMPLATE = "[warm] Hi, this is {name} from Clover Posivex. {question}"
 
 
 class PromptManager:

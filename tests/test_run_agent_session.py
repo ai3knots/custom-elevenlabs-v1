@@ -42,7 +42,7 @@ from tests.support.fake_call import (
 )
 from tests.support.mock_providers import MockLLM, MockSTT, MockTTS, MockVAD
 
-FIRST_MESSAGE = "Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of Apex Pizza?"
+FIRST_MESSAGE = "[warm] Hi, this is Amelia from Clover Posivex. Am I speaking with the owner of Apex Pizza?"
 DESTINATION = "http://localhost:3000/api/webhooks/elevenlabs"
 
 
