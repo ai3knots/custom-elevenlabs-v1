@@ -58,3 +58,15 @@ tmp/
 # Call recordings and observability exports (contain phone numbers and conversation text)
 recent-calls/
 livekit-recordings/
+
+# Coding-agent files (LiveKit starter and skills installer): local to each developer
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+.mcp.json
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.github/
