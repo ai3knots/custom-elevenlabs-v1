@@ -360,6 +360,8 @@ number picked; no id, an id that is not listed, or an entry with no `sip_trunk_i
 | `phnum_posivex_0298` | +14703610298 | `ST_dtEZaHJHXPjk` (`Telnyx-0298`) |
 | `phnum_posivex_0186` | +14707630186 | `ST_bbrs7okbYU2s` (`Telnyx-0186`) |
 | `phnum_posivex_7057` | +14707427057 | `ST_ZhFrYvSfd9po` (`Telnyx-7057`) |
+| `phnum_posivex_6119` | +19432716119 | `ST_JZVRhBd4M57Z` (`Telnyx-6119`) |
+| `phnum_posivex_6088` | +19432716088 | `ST_nwowWxFKUxAB` (`Telnyx-6088`) |
 
 **Adding a number.** The password stays out of the repository and out of chat; it goes straight to the script as an environment variable.
 1. In Telnyx, assign the number to its SIP connection and check the connection's outbound voice profile allows US calls.

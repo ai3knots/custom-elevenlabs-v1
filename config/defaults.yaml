@@ -138,6 +138,14 @@ phone_numbers:
     phone_number: "+14707427057"
     label: "Posivex 470-742-7057"
     sip_trunk_id: "ST_ZhFrYvSfd9po"
+  - phone_number_id: "phnum_posivex_6119"
+    phone_number: "+19432716119"
+    label: "Posivex 943-271-6119"
+    sip_trunk_id: "ST_JZVRhBd4M57Z"
+  - phone_number_id: "phnum_posivex_6088"
+    phone_number: "+19432716088"
+    label: "Posivex 943-271-6088"
+    sip_trunk_id: "ST_nwowWxFKUxAB"
 
 # Live transfer to our team (a cold transfer: SIP REFER through the call's own trunk). Off until the carrier has SIP REFER enabled
 # (docs/RUNBOOK.md 7.10). `enabled` must be true on the API (it lengthens the media timeout of the calls it dials) and on the agent.
